@@ -6,15 +6,18 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
+	"unsafe"
 
 	"github.com/mdlayher/packet"
+	"github.com/mdlayher/socket"
 	"github.com/packetcap/go-pcap/filter"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
 )
 
-func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, count int, expr string) error {
+func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, count int, expr string, path string) error {
 
 	cfg := packet.Config{}
 
@@ -34,10 +37,10 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 	}
 
 	var in *net.Interface
+	var err error
 	if iface == "any" {
 		in = &net.Interface{Index: 0, Name: "any"}
 	} else {
-		var err error
 		in, err = net.InterfaceByName(iface)
 		if err != nil {
 			return fmt.Errorf("unknown interface %s: %v", iface, err)
@@ -57,11 +60,56 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 		}
 		return fmt.Errorf("failed to listen: %v", err)
 	}
+
 	// setting promisc mode
-	c.SetPromiscuous(promisc)
+	if in.Name == "any" {
+		ifis, err := net.Interfaces()
+		if err != nil {
+			return fmt.Errorf("failed to get network interfaces: %v", err)
+		}
+		if len(ifis) == 0 {
+			return fmt.Errorf("no network interfaces found")
+		}
+		// getting access to unexported socket connection
+		sock := *(**socket.Conn)(unsafe.Pointer(c))
+		for _, ifi := range ifis {
+
+			// true is used to line up other checks.
+			ok := true &&
+				// Look for an Ethernet interface.
+				len(ifi.HardwareAddr) == 6 &&
+				// Look for up, multicast, broadcast.
+				ifi.Flags&(net.FlagUp|net.FlagMulticast|net.FlagBroadcast) != 0
+
+			if ok {
+				mreq := unix.PacketMreq{
+					Ifindex: int32(ifi.Index),
+					Type:    unix.PACKET_MR_PROMISC,
+				}
+				membership := unix.PACKET_DROP_MEMBERSHIP
+				if promisc {
+					membership = unix.PACKET_ADD_MEMBERSHIP
+				}
+				// does this really set promisc mode on all devices?
+				err = sock.SetsockoptPacketMreq(unix.SOL_PACKET, membership, &mreq)
+				if err != nil {
+					return fmt.Errorf("unable to set promiscuous mode: %v", err)
+				}
+			}
+		}
+	} else {
+		err = c.SetPromiscuous(promisc)
+		if err != nil {
+			return fmt.Errorf("unable to set promiscuous mode: %v", err)
+		}
+	}
+
 	// timeout
 	if timeout > 0 {
-		c.SetDeadline(time.Now().Add(timeout))
+		err = c.SetDeadline(time.Now().Add(timeout))
+		if err != nil {
+			return fmt.Errorf("unable to set timeout: %v", err)
+		}
 	}
 	defer func() {
 		stats, err := c.Stats()
@@ -91,75 +139,94 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 	)
 	// snaplen
 	b := make([]byte, snaplen)
+
+	// file to write packets
+	var f *os.File
+	if path == "" {
+		f = os.Stdout
+	} else {
+		f, err = os.OpenFile(filepath.FromSlash(path), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open file: %v", err)
+		}
+		defer f.Close()
+	}
+
 	// number of packets
 	infinity := count == 0
-
 	for i := 0; infinity || i < count; i++ {
 		n, _, err := c.ReadFrom(b)
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
 				return nil
 			}
-			log.Fatalf("failed to read Ethernet frame: %v", err)
+			return fmt.Errorf("failed to read Ethernet frame: %v", err)
 		}
 
 		if err := ether.Parse(b[:n]); err != nil {
-			log.Fatalln(err)
+			f.WriteString(err.Error() + "\n")
+			continue
 		}
-		fmt.Println(&ether)
+		f.WriteString(ether.String() + "\n")
 		switch ether.NextLayer() {
 		case "IPv4":
 			if err := ip.Parse(ether.Payload); err != nil {
-				log.Fatalln(err)
+				f.WriteString(err.Error() + "\n")
+				continue
 			}
-			fmt.Println(&ip)
-			if len(ip.Options) > 0 {
-				break
-			}
+			f.WriteString(ip.String() + "\n")
 			switch ip.NextLayer() {
 			case "TCP":
 				if err := tcp.Parse(ip.Payload); err != nil {
-					log.Fatalln(err)
+					f.WriteString(err.Error() + "\n")
+					continue
 				}
-				fmt.Println(&tcp)
+				f.WriteString(tcp.String() + "\n")
 			case "UDP":
 				if err := udp.Parse(ip.Payload); err != nil {
-					log.Fatalln(err)
+					f.WriteString(err.Error() + "\n")
+					continue
 				}
-				fmt.Println(&udp)
+				f.WriteString(udp.String() + "\n")
 			case "ICMP":
 				if err := icmp.Parse(ip.Payload); err != nil {
-					log.Fatalln(err)
+					f.WriteString(err.Error() + "\n")
+					continue
 				}
-				fmt.Println(&icmp)
+				f.WriteString(icmp.String() + "\n")
 			}
 		case "IPv6":
 			if err := ip6.Parse(ether.Payload); err != nil {
-				log.Fatalln(err)
+				f.WriteString(err.Error() + "\n")
+				continue
 			}
-			fmt.Println(&ip6)
+			f.WriteString(ip6.String() + "\n")
 			switch ip6.NextLayer() {
 			case "TCP":
 				if err := tcp.Parse(ip6.Payload); err != nil {
-					log.Fatalln(err)
+					f.WriteString(err.Error() + "\n")
+					continue
 				}
-				fmt.Println(&tcp)
+				f.WriteString(tcp.String() + "\n")
 			case "UDP":
 				if err := udp.Parse(ip6.Payload); err != nil {
-					log.Fatalln(err)
+					f.WriteString(err.Error() + "\n")
+					continue
 				}
-				fmt.Println(&udp)
+				f.WriteString(udp.String() + "\n")
 			case "ICMPv6":
 				if err := icmp6.Parse(ip6.Payload); err != nil {
-					log.Fatalln(err)
+					f.WriteString(err.Error() + "\n")
+					continue
 				}
-				fmt.Println(&icmp6)
+				f.WriteString(icmp6.String() + "\n")
 			}
 		case "ARP":
 			if err := arp.Parse(ether.Payload); err != nil {
-				log.Fatalln(err)
+				f.WriteString(err.Error() + "\n")
+				continue
 			}
-			fmt.Println(&arp)
+			f.WriteString(arp.String() + "\n")
 		}
 	}
 	return nil
