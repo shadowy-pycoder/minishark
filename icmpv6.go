@@ -8,6 +8,7 @@ import (
 
 const headerSizeICMPv6 = 4
 
+// ICMPv6 is an integral part of IPv6 and performs error reporting and diagnostic functions.
 type ICMPv6Segment struct {
 	Type     uint8
 	Code     uint8
@@ -32,6 +33,7 @@ func (i *ICMPv6Segment) String() string {
 	)
 }
 
+// Parse parses the given byte data into an ICMPv6 segment struct.
 func (i *ICMPv6Segment) Parse(data []byte) error {
 	if len(data) < headerSizeICMPv6 {
 		return fmt.Errorf("minimum header size for ICMPv6 is %d bytes, got %d bytes", headerSizeICMPv6, len(data))
@@ -40,6 +42,22 @@ func (i *ICMPv6Segment) Parse(data []byte) error {
 	i.Code = data[1]
 	i.Checksum = binary.BigEndian.Uint16(data[2:headerSizeICMPv6])
 	i.Payload = data[headerSizeICMPv6:]
+	var pLen int
+	switch i.Type {
+	case 1, 2, 3, 4, 128, 129, 133:
+		pLen = 4
+	case 134:
+		pLen = 12
+	case 135, 136:
+		pLen = 20
+	case 137:
+		pLen = 36
+	default:
+		pLen = len(i.Payload)
+	}
+	if len(i.Payload) < pLen {
+		return fmt.Errorf("minimum payload length for ICMPv6 with type %d is %d bytes", i.Type, pLen)
+	}
 	return nil
 }
 

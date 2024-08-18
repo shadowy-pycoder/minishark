@@ -7,11 +7,12 @@ import (
 
 const headerSizeUDP = 8
 
+// UDP protocol is defined in RFC 768.
 type UDPSegment struct {
-	SrcPort   uint16
-	DstPort   uint16
-	UDPLength uint16
-	Checksum  uint16
+	SrcPort   uint16 // Identifies the sending port.
+	DstPort   uint16 // Identifies the receiving port.
+	UDPLength uint16 // Specifies the length in bytes of the UDP header and UDP data.
+	Checksum  uint16 // The checksum field may be used for error-checking of the header and data.
 	Payload   []byte
 }
 
@@ -32,6 +33,7 @@ func (u *UDPSegment) String() string {
 	)
 }
 
+// Parse parses the given byte data into a UDPSegment struct.
 func (u *UDPSegment) Parse(data []byte) error {
 	if len(data) < headerSizeUDP {
 		return fmt.Errorf("minimum header size for UDP is %d bytes, got %d bytes", headerSizeUDP, len(data))

@@ -8,16 +8,21 @@ import (
 
 const headerSizeIPv6 = 40
 
+// An IPv6 packet is the smallest message entity exchanged using Internet Protocol version 6 (IPv6).
+// IPv6 protocol defined in RFC 2460.
 type IPv6Packet struct {
-	Version       uint8  // 4 bits version field (for IPv6, this is always equal to 6)
-	TrafficClass  uint8  // 6 + 2 bits
-	FlowLabel     uint32 // 20 bits
-	PayloadLength uint16 // 16 bits
-	NextHeader    uint8  // 8 bits
-	HopLimit      uint8  // 8 bits
-	SrcIP         netip.Addr
-	DstIP         netip.Addr
-	Payload       []byte
+	Version       uint8  // 4 bits version field (for IPv6, this is always equal to 6).
+	TrafficClass  uint8  // 6 + 2 bits holds DS and ECN values.
+	FlowLabel     uint32 // 20 bits high-entropy identifier of a flow of packets between a source and destination.
+	PayloadLength uint16 // 16 bits the size of the payload in octets, including any extension headers.
+	NextHeader    uint8  // 8 bits specifies the type of the next header.
+	// 8 bits replaces the time to live field in IPv4. This value is decremented by one at each forwarding node
+	// and the packet is discarded if it becomes 0. However, the destination node should process the packet normally
+	// even if received with a hop limit of 0.
+	HopLimit uint8
+	SrcIP    netip.Addr // The unicast IPv6 address of the sending node.
+	DstIP    netip.Addr // The IPv6 unicast or multicast address of the destination node(s).
+	Payload  []byte
 }
 
 func (p *IPv6Packet) String() string {
@@ -44,6 +49,7 @@ func (p *IPv6Packet) String() string {
 	)
 }
 
+// Parse parses the given byte data into an IPv6 packet struct.
 func (p *IPv6Packet) Parse(data []byte) error {
 	if len(data) < headerSizeIPv6 {
 		return fmt.Errorf("minimum header size for IPv6 is %d bytes, got %d bytes", headerSizeIPv6, len(data))
@@ -61,6 +67,7 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	return nil
 }
 
+// NextLayer returns the type of the next header.
 func (p *IPv6Packet) NextLayer() string {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 	var proto string

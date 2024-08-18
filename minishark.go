@@ -137,7 +137,7 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 			fmt.Println("stats indicated 0 received packets")
 		}
 
-		fmt.Fprintf(f, "- Packets: %d, Drops: %d, Freeze Queue Count: %d\n- Packets Captured: %d",
+		fmt.Fprintf(f, "- Packets: %d, Drops: %d, Freeze Queue Count: %d\n- Packets Captured: %d\n",
 			stats.Packets, stats.Drops, stats.FreezeQueueCount, packets)
 		// close Conn
 		c.Close()

@@ -8,21 +8,22 @@ import (
 
 const headerSizeIPv4 = 20
 
+// Internet Protocol version 4 is described in IETF publication RFC 791.
 type IPv4Packet struct {
-	Version        uint8 // 4 bits version field (for IPv4, this is always equal to 4)
-	IHL            uint8 // 4 bits size of header (number of 32-bit words)
-	DSCP           uint8 // 6 bits field (specifies differentiated services)
-	ECN            uint8 // 2 bits field (end-to-end notification of network congestion without dropping packets)
-	TotalLength    uint16
-	Identification uint16
-	Flags          uint8  // 3 bits field (used to control or identify fragments)
-	FragmentOffset uint16 // 13 bits (offset of a particular fragment)
-	TTL            uint8
-	Protocol       uint8
-	HeaderChecksum uint16
-	SrcIP          netip.Addr
-	DstIP          netip.Addr
-	Options        []byte // if ihl > 5
+	Version        uint8      // 4 bits version (for IPv4, this is always equal to 4).
+	IHL            uint8      // 4 bits size of header (number of 32-bit words).
+	DSCP           uint8      // 6 bits specifies differentiated services.
+	ECN            uint8      // 2 bits end-to-end notification of network congestion without dropping packets.
+	TotalLength    uint16     // 16 bits defines the entire packet size in bytes, including header and data.
+	Identification uint16     // 16 bits identifies the group of fragments of a single IP datagram.
+	Flags          uint8      // 3 bits used to control or identify fragments.
+	FragmentOffset uint16     // 13 bits offset of a particular fragment.
+	TTL            uint8      // 8 bits limits a datagram's lifetime to prevent network failure.
+	Protocol       uint8      // 8 bits defines the protocol used in the data portion of the IP datagram.
+	HeaderChecksum uint16     // 16 bits used for error checking of the header.
+	SrcIP          netip.Addr // IPv4 address of the sender of the packet.
+	DstIP          netip.Addr // IPv4 address of the receiver of the packet.
+	Options        []byte     // if ihl > 5
 	Payload        []byte
 }
 
@@ -64,6 +65,7 @@ func (p *IPv4Packet) String() string {
 		p.Payload)
 }
 
+// Parse parses the given byte data into an IPv4 packet struct.
 func (p *IPv4Packet) Parse(data []byte) error {
 	if len(data) < headerSizeIPv4 {
 		return fmt.Errorf("minimum header size for IPv4 is %d bytes, got %d bytes", headerSizeIPv4, len(data))

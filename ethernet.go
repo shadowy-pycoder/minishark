@@ -9,10 +9,11 @@ import (
 
 const ethernetHeaderSize = 14
 
+// An Ethernet frame is a data link layer protocol data unit.
 type EthernetFrame struct {
-	DstMAC    net.HardwareAddr
-	SrcMAC    net.HardwareAddr
-	EtherType uint16
+	DstMAC    net.HardwareAddr // MAC address of the destination device.
+	SrcMAC    net.HardwareAddr // MAC address of the source device.
+	EtherType uint16           // The protocol of the upper layer.
 	Payload   []byte
 }
 
@@ -44,6 +45,7 @@ func (ef *EthernetFrame) Parse(data []byte) error {
 	return nil
 }
 
+// NextLayer returns the name of the next layer protocol based on the EtherType field of the EthernetFrame.
 func (ef *EthernetFrame) NextLayer() string {
 	var ets string
 	switch ef.EtherType {
