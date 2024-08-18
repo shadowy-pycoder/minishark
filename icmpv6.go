@@ -232,8 +232,8 @@ func (i *ICMPv6Segment) payload() string {
 - Options: (%d bytes) %x`,
 			binary.BigEndian.Uint32(i.Payload[0:4]), len(i.Payload[4:]), i.Payload[4:])
 	case 134:
-		hopLimit := payload[0]
-		flags := payload[1]
+		hopLimit := i.Payload[0]
+		flags := i.Payload[1]
 		managedAddress := (flags >> 7) & 1
 		otherConfiguration := (flags >> 6) & 1
 		reserved := flags & (1<<6 - 1)

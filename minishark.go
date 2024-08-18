@@ -3,15 +3,12 @@ package minishark
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
-	"unsafe"
 
 	"github.com/mdlayher/packet"
-	"github.com/mdlayher/socket"
 	"github.com/packetcap/go-pcap/filter"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
@@ -36,8 +33,10 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 		cfg.Filter = raw
 	}
 
-	var in *net.Interface
-	var err error
+	var (
+		in  *net.Interface
+		err error
+	)
 	if iface == "any" {
 		in = &net.Interface{Index: 0, Name: "any"}
 	} else {
@@ -45,61 +44,28 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 		if err != nil {
 			return fmt.Errorf("unknown interface %s: %v", iface, err)
 		}
-		// check the interface is up
-		if in.Flags&net.FlagUp != net.FlagUp {
+		ok := true &&
+			// Look for an Ethernet interface.
+			len(in.HardwareAddr) == 6 &&
+			// Look for up, multicast, broadcast.
+			in.Flags&(net.FlagUp|net.FlagMulticast|net.FlagBroadcast) != 0
+		if !ok {
 			return fmt.Errorf("interface %s is not up", iface)
 		}
 	}
-	fmt.Printf("capturing from interface %s\n", in.Name)
 
-	// openning connection
+	// opening connection
 	c, err := packet.Listen(in, packet.Raw, unix.ETH_P_ALL, &cfg)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return fmt.Errorf("skipping, permission denied (try setting CAP_NET_RAW capability): %v", err)
+			return fmt.Errorf("permission denied (try setting CAP_NET_RAW capability): %v", err)
 		}
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
 	// setting promisc mode
-	if in.Name == "any" {
-		ifis, err := net.Interfaces()
-		if err != nil {
-			return fmt.Errorf("failed to get network interfaces: %v", err)
-		}
-		if len(ifis) == 0 {
-			return fmt.Errorf("no network interfaces found")
-		}
-		// getting access to unexported socket connection
-		sock := *(**socket.Conn)(unsafe.Pointer(c))
-		for _, ifi := range ifis {
-
-			// true is used to line up other checks.
-			ok := true &&
-				// Look for an Ethernet interface.
-				len(ifi.HardwareAddr) == 6 &&
-				// Look for up, multicast, broadcast.
-				ifi.Flags&(net.FlagUp|net.FlagMulticast|net.FlagBroadcast) != 0
-
-			if ok {
-				mreq := unix.PacketMreq{
-					Ifindex: int32(ifi.Index),
-					Type:    unix.PACKET_MR_PROMISC,
-				}
-				membership := unix.PACKET_DROP_MEMBERSHIP
-				if promisc {
-					membership = unix.PACKET_ADD_MEMBERSHIP
-				}
-				// does this really set promisc mode on all devices?
-				err = sock.SetsockoptPacketMreq(unix.SOL_PACKET, membership, &mreq)
-				if err != nil {
-					return fmt.Errorf("unable to set promiscuous mode: %v", err)
-				}
-			}
-		}
-	} else {
-		err = c.SetPromiscuous(promisc)
-		if err != nil {
+	if in.Name != "any" {
+		if err = c.SetPromiscuous(promisc); err != nil {
 			return fmt.Errorf("unable to set promiscuous mode: %v", err)
 		}
 	}
@@ -111,21 +77,6 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 			return fmt.Errorf("unable to set timeout: %v", err)
 		}
 	}
-	defer func() {
-		stats, err := c.Stats()
-		if err != nil {
-			log.Printf("failed to fetch stats: %v", err)
-		}
-		// Received some data, assume some Stats were populated.
-		if stats.Packets == 0 {
-			log.Println("stats indicated 0 received packets")
-		}
-
-		log.Printf("- packets: %d, drops: %d, freeze queue count: %d",
-			stats.Packets, stats.Drops, stats.FreezeQueueCount)
-		// close Conn
-		c.Close()
-	}()
 
 	var (
 		ether EthernetFrame
@@ -138,6 +89,9 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 		icmp6 ICMPv6Segment
 	)
 	// snaplen
+	if snaplen <= 0 {
+		snaplen = 65535
+	}
 	b := make([]byte, snaplen)
 
 	// file to write packets
@@ -153,7 +107,41 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 	}
 
 	// number of packets
+	if count < 0 {
+		count = 0
+	}
 	infinity := count == 0
+	fmt.Fprintf(f, `- Interface: %s
+- Snapshot Length: %d
+- Promiscuous Mode: %v
+- Timeout: %s
+- Number of Packets: %d
+- BPF Filter: %q
+
+`,
+		in.Name,
+		snaplen,
+		in.Name != "any" && promisc,
+		timeout,
+		count,
+		expr,
+	)
+	var packets uint64
+	defer func() {
+		stats, err := c.Stats()
+		if err != nil {
+			fmt.Printf("failed to fetch stats: %v", err)
+		}
+		// Received some data, assume some Stats were populated.
+		if stats.Packets == 0 {
+			fmt.Println("stats indicated 0 received packets")
+		}
+
+		fmt.Fprintf(f, "- Packets: %d, Drops: %d, Freeze Queue Count: %d\n- Packets Captured: %d",
+			stats.Packets, stats.Drops, stats.FreezeQueueCount, packets)
+		// close Conn
+		c.Close()
+	}()
 	for i := 0; infinity || i < count; i++ {
 		n, _, err := c.ReadFrom(b)
 		if err != nil {
@@ -167,6 +155,9 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 			f.WriteString(err.Error() + "\n")
 			continue
 		}
+		packets++
+		fmt.Fprintf(f, "- Packet: %d Timestamp: %s\n", packets, time.Now().UTC().Format("2006-01-02T15:04:05-0700"))
+		f.WriteString("==================================================================" + "\n")
 		f.WriteString(ether.String() + "\n")
 		switch ether.NextLayer() {
 		case "IPv4":

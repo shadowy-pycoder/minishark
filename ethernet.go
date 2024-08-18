@@ -22,8 +22,7 @@ func (ef *EthernetFrame) String() string {
 - SrcMAC: %s
 - EtherType: %s (%#04x)
 - Payload: (%d bytes) %x 
-%s
-`,
+%s`,
 		ef.DstMAC,
 		ef.SrcMAC,
 		ef.NextLayer(),
