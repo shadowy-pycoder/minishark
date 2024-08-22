@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, count int, expr string, path string) error {
+func OpenLive(iface string, snaplen int32, promisc bool, timeout time.Duration, count int, expr string, path string) error {
 
 	cfg := packet.Config{}
 
@@ -72,22 +72,10 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 
 	// timeout
 	if timeout > 0 {
-		err = c.SetDeadline(time.Now().Add(timeout))
-		if err != nil {
+		if err = c.SetDeadline(time.Now().Add(timeout)); err != nil {
 			return fmt.Errorf("unable to set timeout: %v", err)
 		}
 	}
-
-	var (
-		ether EthernetFrame
-		ip    IPv4Packet
-		ip6   IPv6Packet
-		arp   ARPPacket
-		tcp   TCPSegment
-		udp   UDPSegment
-		icmp  ICMPSegment
-		icmp6 ICMPv6Segment
-	)
 	// snaplen
 	if snaplen <= 0 {
 		snaplen = 65535
@@ -142,6 +130,28 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 		// close Conn
 		c.Close()
 	}()
+
+	// pcap file to write packets
+	fpcap, err := os.OpenFile("./minishark.pcap", os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %v", err)
+	}
+	defer fpcap.Close()
+	pcap := NewPcapWriter(fpcap)
+	if err = pcap.WriteGlobalHeader(snaplen); err != nil {
+		return err
+	}
+
+	var (
+		ether EthernetFrame
+		ip    IPv4Packet
+		ip6   IPv6Packet
+		arp   ARPPacket
+		tcp   TCPSegment
+		udp   UDPSegment
+		icmp  ICMPSegment
+		icmp6 ICMPv6Segment
+	)
 	for i := 0; infinity || i < count; i++ {
 		n, _, err := c.ReadFrom(b)
 		if err != nil {
@@ -151,12 +161,19 @@ func OpenLive(iface string, snaplen int, promisc bool, timeout time.Duration, co
 			return fmt.Errorf("failed to read Ethernet frame: %v", err)
 		}
 
-		if err := ether.Parse(b[:n]); err != nil {
+		timestamp := time.Now().UTC()
+		data := b[:n]
+		if err = pcap.WritePacket(timestamp, data); err != nil {
+			return err
+		}
+
+		if err := ether.Parse(data); err != nil {
 			f.WriteString(err.Error() + "\n")
 			continue
 		}
+
 		packets++
-		fmt.Fprintf(f, "- Packet: %d Timestamp: %s\n", packets, time.Now().UTC().Format("2006-01-02T15:04:05-0700"))
+		fmt.Fprintf(f, "- Packet: %d Timestamp: %s\n", packets, timestamp.Format("2006-01-02T15:04:05-0700"))
 		f.WriteString("==================================================================" + "\n")
 		f.WriteString(ether.String() + "\n")
 		switch ether.NextLayer() {
