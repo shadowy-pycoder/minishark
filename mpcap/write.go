@@ -44,7 +44,7 @@ func NewPcapWriter(w io.Writer) *PcapWriter {
 	return &PcapWriter{w: w}
 }
 
-func (pw *PcapWriter) WriteGlobalHeader(snaplen int32) error {
+func (pw *PcapWriter) WriteGlobalHeader(snaplen int) error {
 	var buf [24]byte
 	nativeEndian.PutUint32(buf[0:4], magicNumber)
 	nativeEndian.PutUint16(buf[4:6], versionMajor)

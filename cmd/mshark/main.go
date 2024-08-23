@@ -1,5 +1,13 @@
 package main
 
+import (
+	"fmt"
+	"os"
+)
+
 func main() {
-	root()
+	if err := root(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "mshark: %v\n", err)
+		os.Exit(2)
+	}
 }

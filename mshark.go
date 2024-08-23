@@ -28,7 +28,7 @@ type layers struct {
 
 type Config struct {
 	Iface       string        // The name of the network interface ("any" means listen on all interfaces).
-	Snaplen     int32         // The maximum length of each packet snapshot. Defaults to 65535.
+	Snaplen     int           // The maximum length of each packet snapshot. Defaults to 65535.
 	Promisc     bool          // Promiscuous mode. This setting is ignored for "any" interface.
 	Timeout     time.Duration // The maximum duration of the packet capture process.
 	PacketCount int           // The maximum number of packets to capture.
@@ -103,7 +103,7 @@ func OpenLive(conf *Config) error {
 	}
 	// snaplen
 	snaplen := conf.Snaplen
-	if snaplen <= 0 {
+	if snaplen <= 0 || snaplen > 65535 {
 		snaplen = 65535
 	}
 	b := make([]byte, snaplen)
