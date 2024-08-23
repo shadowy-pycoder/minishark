@@ -35,7 +35,7 @@ type Config struct {
 	Expr        string        // BPF filter expression.
 	Path        string        // File path to write captured packet data to.
 	Pcap        bool          // Whether to create PCAP file.
-	PcapPath    string        // Path to a PCAP file. Defaults to "mshark.pcap" in the current working directory.
+	PcapPath    string        // Path to a PCAP file. Defaults to "mshark_timestamp.pcap" in the current working directory.
 }
 
 func OpenLive(conf *Config) error {
@@ -163,7 +163,7 @@ func OpenLive(conf *Config) error {
 	var pcap *mpcap.PcapWriter
 	if conf.Pcap {
 		if conf.PcapPath == "" {
-			conf.PcapPath = "./mshark.pcap"
+			conf.PcapPath = fmt.Sprintf("./mshark_%s.pcap", time.Now().UTC().Format("20060102_150405"))
 		}
 		fpcap, err := os.OpenFile(filepath.FromSlash(conf.PcapPath), os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
