@@ -1,4 +1,4 @@
-APP_NAME?=minishark
+APP_NAME?=mshark
 
 all: build
 
@@ -9,8 +9,8 @@ setcap:
 	sudo setcap cap_net_raw+ep ./bin/${APP_NAME}
 
 create:
-	go test -c -race && sudo setcap cap_net_raw+ep minishark.test
+	go test -c -race && sudo setcap cap_net_raw+ep mshark.test
 
 bench: create
-	./minishark.test -test.bench=. -test.benchmem -test.run=^$$ -test.benchtime 10000x \
+	./mshark.test -test.bench=. -test.benchmem -test.run=^$$ -test.benchtime 10000x \
 	-test.cpuprofile='cpu.prof' -test.memprofile='mem.prof'

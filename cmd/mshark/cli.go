@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	ms "github.com/shadowy-pycoder/minishark"
+	ms "github.com/shadowy-pycoder/mshark"
 )
 
 func root() {

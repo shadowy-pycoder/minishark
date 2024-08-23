@@ -1,4 +1,4 @@
-package minishark
+package mshark
 
 import (
 	"errors"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/mdlayher/packet"
 	"github.com/packetcap/go-pcap/filter"
+	"github.com/shadowy-pycoder/mshark/mpcap"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
 )
@@ -34,7 +35,7 @@ type Config struct {
 	Expr        string        // BPF filter expression.
 	Path        string        // File path to write captured packet data to.
 	Pcap        bool          // Whether to create PCAP file.
-	PcapPath    string        // Path to a PCAP file. Defaults to "minishark.pcap" in the current working directory.
+	PcapPath    string        // Path to a PCAP file. Defaults to "mshark.pcap" in the current working directory.
 }
 
 func OpenLive(conf *Config) error {
@@ -159,17 +160,17 @@ func OpenLive(conf *Config) error {
 	}()
 
 	// pcap file to write packets
-	var pcap *pcapWriter
+	var pcap *mpcap.PcapWriter
 	if conf.Pcap {
 		if conf.PcapPath == "" {
-			conf.PcapPath = "./minishark.pcap"
+			conf.PcapPath = "./mshark.pcap"
 		}
 		fpcap, err := os.OpenFile(filepath.FromSlash(conf.PcapPath), os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to open file: %v", err)
 		}
 		defer fpcap.Close()
-		pcap = NewPcapWriter(fpcap)
+		pcap = mpcap.NewPcapWriter(fpcap)
 		if err = pcap.WriteGlobalHeader(snaplen); err != nil {
 			return err
 		}

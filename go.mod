@@ -1,4 +1,4 @@
-module github.com/shadowy-pycoder/minishark
+module github.com/shadowy-pycoder/mshark
 
 go 1.23.0
 

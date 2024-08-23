@@ -1,4 +1,4 @@
-package minishark
+package mpcap
 
 import (
 	"encoding/binary"
@@ -35,16 +35,16 @@ func init() {
 	}
 }
 
-type pcapWriter struct {
+type PcapWriter struct {
 	w   io.Writer
 	buf [16]byte
 }
 
-func NewPcapWriter(w io.Writer) *pcapWriter {
-	return &pcapWriter{w: w}
+func NewPcapWriter(w io.Writer) *PcapWriter {
+	return &PcapWriter{w: w}
 }
 
-func (pw *pcapWriter) WriteGlobalHeader(snaplen int32) error {
+func (pw *PcapWriter) WriteGlobalHeader(snaplen int32) error {
 	var buf [24]byte
 	nativeEndian.PutUint32(buf[0:4], magicNumber)
 	nativeEndian.PutUint16(buf[4:6], versionMajor)
@@ -57,7 +57,7 @@ func (pw *pcapWriter) WriteGlobalHeader(snaplen int32) error {
 	return err
 }
 
-func (pw *pcapWriter) writePacketHeader(timestamp time.Time, packetLen int) error {
+func (pw *PcapWriter) writePacketHeader(timestamp time.Time, packetLen int) error {
 	secs := timestamp.Unix()
 	msecs := timestamp.Nanosecond() / 1e6
 	nativeEndian.PutUint32(pw.buf[0:4], uint32(secs))
@@ -68,7 +68,7 @@ func (pw *pcapWriter) writePacketHeader(timestamp time.Time, packetLen int) erro
 	return err
 }
 
-func (pw *pcapWriter) WritePacket(timestamp time.Time, data []byte) error {
+func (pw *PcapWriter) WritePacket(timestamp time.Time, data []byte) error {
 	if err := pw.writePacketHeader(timestamp, len(data)); err != nil {
 		return fmt.Errorf("error writing packet header: %v", err)
 	}

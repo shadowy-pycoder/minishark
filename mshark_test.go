@@ -1,4 +1,4 @@
-package minishark
+package mshark
 
 import (
 	"os"
