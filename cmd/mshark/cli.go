@@ -3,6 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
+	"os"
+	"strings"
 
 	ms "github.com/shadowy-pycoder/mshark"
 )
@@ -27,6 +30,18 @@ Options:
   -h    Show this help message and exit.
 `
 
+func displayInterfaces() error {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return fmt.Errorf("failed to get network interfaces: %v", err)
+	}
+	fmt.Println("0. any")
+	for _, iface := range ifaces {
+		fmt.Printf("%d. %s    %s\n", iface.Index, iface.Name, strings.ToUpper(iface.Flags.String()))
+	}
+	return nil
+}
+
 func root(args []string) error {
 	conf := ms.Config{}
 
@@ -46,6 +61,14 @@ func root(args []string) error {
 		return nil
 	})
 	flags.StringVar(&conf.PcapPath, "path", "", "Path to a PCAP file. Example: ./captured.pcap")
+	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
+		if err := displayInterfaces(); err != nil {
+			fmt.Fprintf(os.Stderr, "mshark: %v\n", err)
+			os.Exit(2)
+		}
+		os.Exit(0)
+		return nil
+	})
 
 	flags.Usage = func() {
 		fmt.Print(usagePrefix)
