@@ -12,7 +12,7 @@ func BenchmarkOpenLive(b *testing.B) {
 		Snaplen:     1600,
 		Promisc:     true,
 		PacketCount: b.N,
-		Path:        os.DevNull,
+		File:        os.DevNull,
 	}
 	if err := OpenLive(&conf); err != nil {
 		b.Fatal(err)

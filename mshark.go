@@ -33,9 +33,8 @@ type Config struct {
 	Timeout     time.Duration // The maximum duration of the packet capture process.
 	PacketCount int           // The maximum number of packets to capture.
 	Expr        string        // BPF filter expression.
-	Path        string        // File path to write captured packet data to.
-	Pcap        bool          // Whether to create PCAP file.
-	PcapPath    string        // Path to a PCAP file. Defaults to "mshark_timestamp.pcap" in the current working directory.
+	File        string        // File path to write captured packet data to. Defaults to /dev/stdout
+	Pcap        bool          // Create a PCAP file in the current working directory.
 }
 
 func OpenLive(conf *Config) error {
@@ -110,14 +109,14 @@ func OpenLive(conf *Config) error {
 
 	// file to write packets
 	var f *os.File
-	if conf.Path == "" {
-		f = os.Stdout
-	} else {
-		f, err = os.OpenFile(filepath.FromSlash(conf.Path), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if conf.File != "" {
+		f, err = os.OpenFile(filepath.FromSlash(conf.File), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to open file: %v", err)
 		}
 		defer f.Close()
+	} else {
+		f = os.Stdout
 	}
 
 	// number of packets
@@ -162,10 +161,8 @@ func OpenLive(conf *Config) error {
 	// pcap file to write packets
 	var pcap *mpcap.PcapWriter
 	if conf.Pcap {
-		if conf.PcapPath == "" {
-			conf.PcapPath = fmt.Sprintf("./mshark_%s.pcap", time.Now().UTC().Format("20060102_150405"))
-		}
-		fpcap, err := os.OpenFile(filepath.FromSlash(conf.PcapPath), os.O_CREATE|os.O_WRONLY, 0644)
+		path := fmt.Sprintf("./mshark_%s.pcap", time.Now().UTC().Format("20060102_150405"))
+		fpcap, err := os.OpenFile(filepath.FromSlash(path), os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to open file: %v", err)
 		}

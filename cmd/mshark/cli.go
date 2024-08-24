@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"text/tabwriter"
 
 	ms "github.com/shadowy-pycoder/mshark"
 )
@@ -31,15 +32,18 @@ Options:
 `
 
 func displayInterfaces() error {
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 0, 0, 2, ' ', tabwriter.TabIndent)
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return fmt.Errorf("failed to get network interfaces: %v", err)
 	}
-	fmt.Println("0. any")
+	fmt.Fprintln(w, "Index\tName\tFlags")
+	fmt.Fprintln(w, "0\tany\tUP")
 	for _, iface := range ifaces {
-		fmt.Printf("%d. %s    %s\n", iface.Index, iface.Name, strings.ToUpper(iface.Flags.String()))
+		fmt.Fprintf(w, "%d\t%s\t%s\n", iface.Index, iface.Name, strings.ToUpper(iface.Flags.String()))
 	}
-	return nil
+	return w.Flush()
 }
 
 func root(args []string) error {
@@ -48,19 +52,18 @@ func root(args []string) error {
 	flags := flag.NewFlagSet("mshark", flag.ExitOnError)
 	flags.StringVar(&conf.Iface, "i", "any", "The name of the network interface. Example: eth0")
 	flags.IntVar(&conf.Snaplen, "s", 0, "The maximum length of each packet snapshot. Defaults to 65535.")
-	flags.BoolFunc("p", `Promiscuous mode. This setting is ignored for "any" interface.`, func(flagValue string) error {
+	flags.BoolFunc("p", `Promiscuous mode. This setting is ignored for "any" interface. Defaults to false.`, func(flagValue string) error {
 		conf.Promisc = true
 		return nil
 	})
 	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp"`)
-	flags.StringVar(&conf.Path, "f", "", "File path to write captured packet data to. Example: ./captured.txt")
-	flags.BoolFunc("pcap", "Whether to create PCAP file.", func(flagValue string) error {
+	flags.StringVar(&conf.File, "f", "", "File path to write captured packet data to. Defaults to stdout.")
+	flags.BoolFunc("pcap", "Create a PCAP file in the current working directory.", func(flagValue string) error {
 		conf.Pcap = true
 		return nil
 	})
-	flags.StringVar(&conf.PcapPath, "path", "", "Path to a PCAP file. Example: ./captured.pcap")
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
 		if err := displayInterfaces(); err != nil {
 			fmt.Fprintf(os.Stderr, "mshark: %v\n", err)
