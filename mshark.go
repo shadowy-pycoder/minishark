@@ -3,6 +3,7 @@ package mshark
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -33,7 +34,7 @@ type Config struct {
 	Timeout     time.Duration // The maximum duration of the packet capture process.
 	PacketCount int           // The maximum number of packets to capture.
 	Expr        string        // BPF filter expression.
-	File        string        // File path to write captured packet data to. Defaults to /dev/stdout
+	File        io.Writer     // File to write captured packet data to. Defaults to /dev/stdout
 	Pcap        bool          // Create a PCAP file in the current working directory.
 }
 
@@ -108,17 +109,12 @@ func OpenLive(conf *Config) error {
 	b := make([]byte, snaplen)
 
 	// file to write packets
-	var f *os.File
-	if conf.File != "" {
-		f, err = os.OpenFile(filepath.FromSlash(conf.File), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to open file: %v", err)
-		}
-		defer f.Close()
+	var f io.Writer
+	if conf.File != nil {
+		f = conf.File
 	} else {
 		f = os.Stdout
 	}
-
 	// number of packets
 	count := conf.PacketCount
 	if count < 0 {
@@ -200,64 +196,64 @@ func OpenLive(conf *Config) error {
 	return nil
 }
 
-func parsePacket(f *os.File, data []byte, packetNum uint64, timestamp time.Time, layers *layers) error {
+func parsePacket(f io.Writer, data []byte, packetNum uint64, timestamp time.Time, layers *layers) error {
 
 	fmt.Fprintf(f, "- Packet: %d Timestamp: %s\n", packetNum, timestamp.Format("2006-01-02T15:04:05-0700"))
-	f.WriteString("==================================================================" + "\n")
+	fmt.Fprintln(f, "==================================================================")
 	if err := layers.ether.Parse(data); err != nil {
 		return err
 	}
-	f.WriteString(layers.ether.String() + "\n")
+	fmt.Fprintln(f, layers.ether.String())
 	switch layers.ether.NextLayer() {
 	case "IPv4":
 		if err := layers.ip.Parse(layers.ether.Payload); err != nil {
 			return err
 		}
-		f.WriteString(layers.ip.String() + "\n")
+		fmt.Fprintln(f, layers.ip.String())
 		switch layers.ip.NextLayer() {
 		case "TCP":
 			if err := layers.tcp.Parse(layers.ip.Payload); err != nil {
 				return err
 			}
-			f.WriteString(layers.tcp.String() + "\n")
+			fmt.Fprintln(f, layers.tcp.String())
 		case "UDP":
 			if err := layers.udp.Parse(layers.ip.Payload); err != nil {
 				return err
 			}
-			f.WriteString(layers.udp.String() + "\n")
+			fmt.Fprintln(f, layers.udp.String())
 		case "ICMP":
 			if err := layers.icmp.Parse(layers.ip.Payload); err != nil {
 				return err
 			}
-			f.WriteString(layers.icmp.String() + "\n")
+			fmt.Fprintln(f, layers.icmp.String())
 		}
 	case "IPv6":
 		if err := layers.ip6.Parse(layers.ether.Payload); err != nil {
 			return err
 		}
-		f.WriteString(layers.ip6.String() + "\n")
+		fmt.Fprintln(f, layers.ip6.String())
 		switch layers.ip6.NextLayer() {
 		case "TCP":
 			if err := layers.tcp.Parse(layers.ip6.Payload); err != nil {
 				return err
 			}
-			f.WriteString(layers.tcp.String() + "\n")
+			fmt.Fprintln(f, layers.tcp.String())
 		case "UDP":
 			if err := layers.udp.Parse(layers.ip6.Payload); err != nil {
 				return err
 			}
-			f.WriteString(layers.udp.String() + "\n")
+			fmt.Fprintln(f, layers.udp.String())
 		case "ICMPv6":
 			if err := layers.icmp6.Parse(layers.ip6.Payload); err != nil {
 				return err
 			}
-			f.WriteString(layers.icmp6.String() + "\n")
+			fmt.Fprintln(f, layers.icmp6.String())
 		}
 	case "ARP":
 		if err := layers.arp.Parse(layers.ether.Payload); err != nil {
 			return err
 		}
-		f.WriteString(layers.arp.String() + "\n")
+		fmt.Fprintln(f, layers.arp.String())
 	}
 	return nil
 }

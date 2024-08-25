@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -59,7 +60,7 @@ func root(args []string) error {
 	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp"`)
-	flags.StringVar(&conf.File, "f", "", "File path to write captured packet data to. Defaults to stdout.")
+	path := flags.String("f", "", "File path to write captured packet data to. Defaults to stdout.")
 	flags.BoolFunc("pcap", "Create a PCAP file in the current working directory.", func(flagValue string) error {
 		conf.Pcap = true
 		return nil
@@ -80,6 +81,15 @@ func root(args []string) error {
 
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+
+	if *path != "" {
+		f, err := os.OpenFile(filepath.FromSlash(*path), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open file: %v", err)
+		}
+		defer f.Close()
+		conf.File = f
 	}
 
 	if err := ms.OpenLive(&conf); err != nil {
