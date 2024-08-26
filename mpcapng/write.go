@@ -11,7 +11,7 @@ import (
 	"github.com/shadowy-pycoder/mshark/native"
 )
 
-// https://.com/
+// https://pcapng.com/
 const (
 	shbBlockType    uint32 = 0x0a0d0d0a
 	byteOrderMagic  uint32 = 0x1a2b3c4d
@@ -66,7 +66,7 @@ func (pw *Writer) WriteHeader(app string, in *net.Interface, expr string, snaple
 
 // writeSHB writes a Section Header Block (SHB) to the  file.
 //
-// https://www.ietf.org/archive/id/draft-tuexen-opsawg--05.html#section_shb
+// https://www.ietf.org/archive/id/draft-tuexen-opsawg-pcapng-05.html#section_shb
 func (pw *Writer) writeSHB(app string) error {
 	options, err := pw.writeShbOptions(app)
 	if err != nil {
@@ -148,7 +148,7 @@ func (pw *Writer) writeShbOptions(app string) ([]byte, error) {
 
 // writeIDB writes an Interface Description Block (IDB) to the  file.
 //
-// https://www.ietf.org/archive/id/draft-tuexen-opsawg--05.html#name-interface-description-block
+// https://www.ietf.org/archive/id/draft-tuexen-opsawg-pcapng-05.html#name-interface-description-block
 func (pw *Writer) writeIDB(in *net.Interface, expr string, snaplen int) error {
 	options, err := pw.writeIdbOptions(in, expr)
 	if err != nil {
@@ -217,7 +217,7 @@ func (pw *Writer) writeIdbOptions(in *net.Interface, expr string) ([]byte, error
 	buf.Write(bytes.Repeat(zero, ifNamePad))
 	binary.Write(buf, nativeEndian, ifMACCode)
 	binary.Write(buf, nativeEndian, uint16(6))
-	if in.Name == "any" {
+	if in.Name == "any" || in.Index == 0 {
 		buf.Write(bytes.Repeat(zero, 6))
 	} else {
 		binary.Write(buf, nativeEndian, in.HardwareAddr)
@@ -242,7 +242,7 @@ func (pw *Writer) writeIdbOptions(in *net.Interface, expr string) ([]byte, error
 
 // WritePacket writes an Enhanced Packet Block (EPB) to the  file.
 //
-// https://www.ietf.org/archive/id/draft-tuexen-opsawg--05.html#name-enhanced-packet-block
+// https://www.ietf.org/archive/id/draft-tuexen-opsawg-pcapng-05.html#name-enhanced-packet-block
 func (pw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	packetLen := len(data)
 	blockLen := 4 + 4 + 4 + 4 + 4 + 4 + 4 + packetLen + 4
