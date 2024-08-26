@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -34,6 +35,25 @@ Usage: mshark [OPTIONS]
 Options:
   -h    Show this help message and exit.
 `
+
+var supportedFormats = []string{"txt", "pcap", "pcapng"}
+
+type ExtFlag []string
+
+func (f *ExtFlag) MarshalText() ([]byte, error) {
+	return nil, nil
+}
+
+func (f *ExtFlag) UnmarshalText(b []byte) error {
+	exts := *f
+	for _, ext := range strings.Split(string(b), ",") {
+		if !slices.Contains(exts, ext) && slices.Contains(supportedFormats, ext) {
+			exts = append(exts, ext)
+		}
+	}
+	*f = exts
+	return nil
+}
 
 func displayInterfaces() error {
 	w := new(tabwriter.Writer)
@@ -72,7 +92,6 @@ func root(args []string) error {
 	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp"`)
-	ext := flags.String("f", "", "File extension to write captured packet data to. Supported values: txt, pcap, pcapng")
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
 		if err := displayInterfaces(); err != nil {
 			fmt.Fprintf(os.Stderr, "mshark: %v\n", err)
@@ -81,6 +100,8 @@ func root(args []string) error {
 		os.Exit(0)
 		return nil
 	})
+	exts := ExtFlag([]string{})
+	flags.TextVar(&exts, "f", &exts, "File extension(s) to write captured data. Supported formats: txt, pcap, pcapng")
 
 	flags.Usage = func() {
 		fmt.Print(usagePrefix)
@@ -104,54 +125,58 @@ func root(args []string) error {
 	}
 	conf.Snaplen = *snaplen
 
-	// creating writers depending on a file extension
-	var pw ms.PacketWriter
-	if *ext != "" {
-		switch *ext {
-		case "txt":
-			f, err := createFile(*ext)
-			if err != nil {
-				return err
+	// creating writers and writing headers depending on a file extension
+	var pw []ms.PacketWriter
+	if len(exts) != 0 {
+		for _, ext := range exts {
+			switch ext {
+			case "txt":
+				f, err := createFile(ext)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				w := ms.NewWriter(f)
+				if err := w.WriteHeader(&conf); err != nil {
+					return err
+				}
+				pw = append(pw, w)
+			case "pcap":
+				f, err := createFile(ext)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				w := mpcap.NewWriter(f)
+				if err := w.WriteHeader(conf.Snaplen); err != nil {
+					return err
+				}
+				pw = append(pw, w)
+			case "pcapng":
+				f, err := createFile(ext)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				w := mpcapng.NewWriter(f)
+				if err := w.WriteHeader("mshark", conf.Device, conf.Expr, conf.Snaplen); err != nil {
+					return err
+				}
+				pw = append(pw, w)
+			default:
+				// unreachable
+				return fmt.Errorf("unsupported file format: %s", ext)
 			}
-			defer f.Close()
-			pw = ms.NewWriter(f)
-		case "pcap":
-			f, err := createFile(*ext)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			pw = mpcap.NewWriter(f)
-		case "pcapng":
-			f, err := createFile(*ext)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			pw = mpcapng.NewWriter(f)
-		default:
-			return fmt.Errorf("unsupported file format: %s", *ext)
 		}
 	} else {
-		pw = ms.NewWriter(os.Stdout)
+		w := ms.NewWriter(os.Stdout)
+		if err := w.WriteHeader(&conf); err != nil {
+			return err
+		}
+		pw = append(pw, w)
 	}
 
-	// writing headers
-	switch t := pw.(type) {
-	case *ms.Writer:
-		if err := t.WriteHeader(&conf); err != nil {
-			return err
-		}
-	case *mpcap.Writer:
-		if err := t.WriteHeader(conf.Snaplen); err != nil {
-			return err
-		}
-	case *mpcapng.Writer:
-		if err := t.WriteHeader("mshark", conf.Device, conf.Expr, conf.Snaplen); err != nil {
-			return err
-		}
-	}
-	if err := ms.OpenLive(&conf, pw); err != nil {
+	if err := ms.OpenLive(&conf, pw...); err != nil {
 		return err
 	}
 	return nil

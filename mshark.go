@@ -171,7 +171,9 @@ func InterfaceByName(name string) (*net.Interface, error) {
 	return in, nil
 }
 
-func OpenLive(conf *Config, pw PacketWriter) error {
+// OpenLive opens a live capture based on the given configuration and writes
+// all captured packets to the given PacketWriters.
+func OpenLive(conf *Config, pw ...PacketWriter) error {
 
 	packetcfg := packet.Config{}
 
@@ -220,8 +222,10 @@ func OpenLive(conf *Config, pw PacketWriter) error {
 		} else {
 			fmt.Printf("- Packets: %d, Drops: %d, Freeze Queue Count: %d\n",
 				stats.Packets, stats.Drops, stats.FreezeQueueCount)
-			if w, ok := pw.(*Writer); ok {
-				fmt.Printf("- Packets Captured: %d\n", w.packets)
+			for _, w := range pw {
+				if w, ok := w.(*Writer); ok {
+					fmt.Fprintf(w.w, "- Packets Captured: %d\n", w.packets)
+				}
 			}
 		}
 		// close Conn
@@ -245,9 +249,10 @@ func OpenLive(conf *Config, pw PacketWriter) error {
 			}
 			return fmt.Errorf("failed to read Ethernet frame: %v", err)
 		}
-
-		if err := pw.WritePacket(time.Now().UTC(), b[:n]); err != nil {
-			return err
+		for _, w := range pw {
+			if err := w.WritePacket(time.Now().UTC(), b[:n]); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
