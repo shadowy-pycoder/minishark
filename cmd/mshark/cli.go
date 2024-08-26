@@ -65,6 +65,10 @@ func root(args []string) error {
 		conf.Pcap = true
 		return nil
 	})
+	flags.BoolFunc("pcapng", "Create a PCAPNG file in the current working directory.", func(flagValue string) error {
+		conf.PcapNG = true
+		return nil
+	})
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
 		if err := displayInterfaces(); err != nil {
 			fmt.Fprintf(os.Stderr, "mshark: %v\n", err)
