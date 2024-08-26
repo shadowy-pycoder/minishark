@@ -7,14 +7,18 @@ import (
 
 func BenchmarkOpenLive(b *testing.B) {
 	b.ResetTimer()
+	in, err := InterfaceByName("any")
+	if err != nil {
+		b.Fatal(err)
+	}
 	conf := Config{
-		Iface:       "any",
+		Device:      in,
 		Snaplen:     1600,
 		Promisc:     true,
 		PacketCount: b.N,
-		File:        io.Discard,
 	}
-	if err := OpenLive(&conf); err != nil {
+	pw := NewWriter(io.Discard)
+	if err := OpenLive(&conf, pw); err != nil {
 		b.Fatal(err)
 	}
 }
