@@ -188,7 +188,6 @@ func root(args []string) error {
 		}
 		pw = append(pw, w)
 	}
-
 	if err := ms.OpenLive(&conf, pw...); err != nil {
 		return err
 	}

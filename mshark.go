@@ -10,9 +10,11 @@ import (
 
 	"github.com/mdlayher/packet"
 	"github.com/packetcap/go-pcap/filter"
+	"github.com/shadowy-pycoder/mshark/layers"
 	"golang.org/x/net/bpf"
-	"golang.org/x/sys/unix"
 )
+
+const unixEthPAll int = 0x03
 
 var _ PacketWriter = &Writer{}
 
@@ -20,15 +22,21 @@ type PacketWriter interface {
 	WritePacket(timestamp time.Time, data []byte) error
 }
 
-type layers struct {
-	ether EthernetFrame
-	ip    IPv4Packet
-	ip6   IPv6Packet
-	arp   ARPPacket
-	tcp   TCPSegment
-	udp   UDPSegment
-	icmp  ICMPSegment
-	icmp6 ICMPv6Segment
+type layer struct {
+	ether layers.EthernetFrame
+	ip    layers.IPv4Packet
+	ip6   layers.IPv6Packet
+	arp   layers.ARPPacket
+	tcp   layers.TCPSegment
+	udp   layers.UDPSegment
+	icmp  layers.ICMPSegment
+	icmp6 layers.ICMPv6Segment
+	dns   layers.DNSMessage
+	ftp   layers.FTPMessage
+	http  layers.HTTPMessage
+	snmp  layers.SNMPMessage
+	ssh   layers.SSHMessage
+	tls   layers.TLSMessage
 }
 
 type Config struct {
@@ -42,7 +50,7 @@ type Config struct {
 
 type Writer struct {
 	w       io.Writer
-	layers  layers
+	layer   layer
 	packets uint64
 }
 
@@ -58,60 +66,60 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	mw.packets++
 	fmt.Fprintf(mw.w, "- Packet: %d Timestamp: %s\n", mw.packets, timestamp.Format("2006-01-02T15:04:05-0700"))
 	fmt.Fprintln(mw.w, "==================================================================")
-	if err := mw.layers.ether.Parse(data); err != nil {
+	if err := mw.layer.ether.Parse(data); err != nil {
 		return err
 	}
-	fmt.Fprintln(mw.w, mw.layers.ether.String())
-	switch mw.layers.ether.NextLayer() {
+	fmt.Fprintln(mw.w, mw.layer.ether.String())
+	switch mw.layer.ether.NextLayer() {
 	case "IPv4":
-		if err := mw.layers.ip.Parse(mw.layers.ether.Payload); err != nil {
+		if err := mw.layer.ip.Parse(mw.layer.ether.Payload); err != nil {
 			return err
 		}
-		fmt.Fprintln(mw.w, mw.layers.ip.String())
-		switch mw.layers.ip.NextLayer() {
+		fmt.Fprintln(mw.w, mw.layer.ip.String())
+		switch mw.layer.ip.NextLayer() {
 		case "TCP":
-			if err := mw.layers.tcp.Parse(mw.layers.ip.Payload); err != nil {
+			if err := mw.layer.tcp.Parse(mw.layer.ip.Payload); err != nil {
 				return err
 			}
-			fmt.Fprintln(mw.w, mw.layers.tcp.String())
+			fmt.Fprintln(mw.w, mw.layer.tcp.String())
 		case "UDP":
-			if err := mw.layers.udp.Parse(mw.layers.ip.Payload); err != nil {
+			if err := mw.layer.udp.Parse(mw.layer.ip.Payload); err != nil {
 				return err
 			}
-			fmt.Fprintln(mw.w, mw.layers.udp.String())
+			fmt.Fprintln(mw.w, mw.layer.udp.String())
 		case "ICMP":
-			if err := mw.layers.icmp.Parse(mw.layers.ip.Payload); err != nil {
+			if err := mw.layer.icmp.Parse(mw.layer.ip.Payload); err != nil {
 				return err
 			}
-			fmt.Fprintln(mw.w, mw.layers.icmp.String())
+			fmt.Fprintln(mw.w, mw.layer.icmp.String())
 		}
 	case "IPv6":
-		if err := mw.layers.ip6.Parse(mw.layers.ether.Payload); err != nil {
+		if err := mw.layer.ip6.Parse(mw.layer.ether.Payload); err != nil {
 			return err
 		}
-		fmt.Fprintln(mw.w, mw.layers.ip6.String())
-		switch mw.layers.ip6.NextLayer() {
+		fmt.Fprintln(mw.w, mw.layer.ip6.String())
+		switch mw.layer.ip6.NextLayer() {
 		case "TCP":
-			if err := mw.layers.tcp.Parse(mw.layers.ip6.Payload); err != nil {
+			if err := mw.layer.tcp.Parse(mw.layer.ip6.Payload); err != nil {
 				return err
 			}
-			fmt.Fprintln(mw.w, mw.layers.tcp.String())
+			fmt.Fprintln(mw.w, mw.layer.tcp.String())
 		case "UDP":
-			if err := mw.layers.udp.Parse(mw.layers.ip6.Payload); err != nil {
+			if err := mw.layer.udp.Parse(mw.layer.ip6.Payload); err != nil {
 				return err
 			}
-			fmt.Fprintln(mw.w, mw.layers.udp.String())
+			fmt.Fprintln(mw.w, mw.layer.udp.String())
 		case "ICMPv6":
-			if err := mw.layers.icmp6.Parse(mw.layers.ip6.Payload); err != nil {
+			if err := mw.layer.icmp6.Parse(mw.layer.ip6.Payload); err != nil {
 				return err
 			}
-			fmt.Fprintln(mw.w, mw.layers.icmp6.String())
+			fmt.Fprintln(mw.w, mw.layer.icmp6.String())
 		}
 	case "ARP":
-		if err := mw.layers.arp.Parse(mw.layers.ether.Payload); err != nil {
+		if err := mw.layer.arp.Parse(mw.layer.ether.Payload); err != nil {
 			return err
 		}
-		fmt.Fprintln(mw.w, mw.layers.arp.String())
+		fmt.Fprintln(mw.w, mw.layer.arp.String())
 	}
 	return nil
 }
@@ -195,7 +203,7 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 	}
 
 	// opening connection
-	c, err := packet.Listen(conf.Device, packet.Raw, unix.ETH_P_ALL, &packetcfg)
+	c, err := packet.Listen(conf.Device, packet.Raw, unixEthPAll, &packetcfg)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			return fmt.Errorf("permission denied (try setting CAP_NET_RAW capability): %v", err)
