@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var _ PacketWriter = &Writer{}
+
 type PacketWriter interface {
 	WritePacket(timestamp time.Time, data []byte) error
 }

@@ -38,10 +38,9 @@ Options:
   -h    Show this help message and exit.
 `
 
-var supportedFormats = []string{"txt", "pcap", "pcapng"}
+var supportedFormats = []string{"stdout", "txt", "pcap", "pcapng"}
 
 var (
-	_ ms.PacketWriter = &ms.Writer{}
 	_ ms.PacketWriter = &mpcap.Writer{}
 	_ ms.PacketWriter = &mpcapng.Writer{}
 )
@@ -109,7 +108,7 @@ func root(args []string) error {
 		return nil
 	})
 	exts := ExtFlag([]string{})
-	flags.TextVar(&exts, "f", &exts, "File extension(s) to write captured data. Supported formats: txt, pcap, pcapng")
+	flags.TextVar(&exts, "f", &exts, "File extension(s) to write captured data. Supported formats: stdout, txt, pcap, pcapng")
 
 	flags.Usage = func() {
 		fmt.Print(usagePrefix)
@@ -138,6 +137,12 @@ func root(args []string) error {
 	if len(exts) != 0 {
 		for _, ext := range exts {
 			switch ext {
+			case "stdout":
+				w := ms.NewWriter(os.Stdout)
+				if err := w.WriteHeader(&conf); err != nil {
+					return err
+				}
+				pw = append(pw, w)
 			case "txt":
 				f, err := createFile(app, ext)
 				if err != nil {
