@@ -22,23 +22,6 @@ type PacketWriter interface {
 	WritePacket(timestamp time.Time, data []byte) error
 }
 
-type layer struct {
-	ether layers.EthernetFrame
-	ip    layers.IPv4Packet
-	ip6   layers.IPv6Packet
-	arp   layers.ARPPacket
-	tcp   layers.TCPSegment
-	udp   layers.UDPSegment
-	icmp  layers.ICMPSegment
-	icmp6 layers.ICMPv6Segment
-	dns   layers.DNSMessage
-	ftp   layers.FTPMessage
-	http  layers.HTTPMessage
-	snmp  layers.SNMPMessage
-	ssh   layers.SSHMessage
-	tls   layers.TLSMessage
-}
-
 type Config struct {
 	Device      *net.Interface // The name of the network interface ("any" means listen on all interfaces).
 	Snaplen     int            // The maximum length of each packet snapshot.
@@ -50,7 +33,6 @@ type Config struct {
 
 type Writer struct {
 	w       io.Writer
-	layer   layer
 	packets uint64
 }
 
@@ -66,62 +48,22 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	mw.packets++
 	fmt.Fprintf(mw.w, "- Packet: %d Timestamp: %s\n", mw.packets, timestamp.Format("2006-01-02T15:04:05-0700"))
 	fmt.Fprintln(mw.w, "==================================================================")
-	if err := mw.layer.ether.Parse(data); err != nil {
+	next := layers.LayerMap["ETH"]
+	if err := next.Parse(data); err != nil {
 		return err
 	}
-	fmt.Fprintln(mw.w, mw.layer.ether.String())
-	switch mw.layer.ether.NextLayer() {
-	case "IPv4":
-		if err := mw.layer.ip.Parse(mw.layer.ether.Payload); err != nil {
+	fmt.Fprintln(mw.w, next.String())
+	for {
+		name, data := next.NextLayer()
+		if name == "" {
+			return nil
+		}
+		next = layers.LayerMap[name]
+		if err := next.Parse(data); err != nil {
 			return err
 		}
-		fmt.Fprintln(mw.w, mw.layer.ip.String())
-		switch mw.layer.ip.NextLayer() {
-		case "TCP":
-			if err := mw.layer.tcp.Parse(mw.layer.ip.Payload); err != nil {
-				return err
-			}
-			fmt.Fprintln(mw.w, mw.layer.tcp.String())
-		case "UDP":
-			if err := mw.layer.udp.Parse(mw.layer.ip.Payload); err != nil {
-				return err
-			}
-			fmt.Fprintln(mw.w, mw.layer.udp.String())
-		case "ICMP":
-			if err := mw.layer.icmp.Parse(mw.layer.ip.Payload); err != nil {
-				return err
-			}
-			fmt.Fprintln(mw.w, mw.layer.icmp.String())
-		}
-	case "IPv6":
-		if err := mw.layer.ip6.Parse(mw.layer.ether.Payload); err != nil {
-			return err
-		}
-		fmt.Fprintln(mw.w, mw.layer.ip6.String())
-		switch mw.layer.ip6.NextLayer() {
-		case "TCP":
-			if err := mw.layer.tcp.Parse(mw.layer.ip6.Payload); err != nil {
-				return err
-			}
-			fmt.Fprintln(mw.w, mw.layer.tcp.String())
-		case "UDP":
-			if err := mw.layer.udp.Parse(mw.layer.ip6.Payload); err != nil {
-				return err
-			}
-			fmt.Fprintln(mw.w, mw.layer.udp.String())
-		case "ICMPv6":
-			if err := mw.layer.icmp6.Parse(mw.layer.ip6.Payload); err != nil {
-				return err
-			}
-			fmt.Fprintln(mw.w, mw.layer.icmp6.String())
-		}
-	case "ARP":
-		if err := mw.layer.arp.Parse(mw.layer.ether.Payload); err != nil {
-			return err
-		}
-		fmt.Fprintln(mw.w, mw.layer.arp.String())
+		fmt.Fprintln(mw.w, next.String())
 	}
-	return nil
 }
 
 // WriteHeader writes a header to the writer.

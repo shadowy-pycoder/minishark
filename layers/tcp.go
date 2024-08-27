@@ -30,6 +30,7 @@ type TCPSegment struct {
 	// indicating the last urgent data byte.
 	UrgentPointer uint16
 	Options       []byte // The length of this field is determined by the data offset field.
+	payload       []byte
 }
 
 func (t *TCPSegment) String() string {
@@ -45,6 +46,7 @@ func (t *TCPSegment) String() string {
 - Checksum: %#04x
 - Urgent Pointer: %d
 - Options: (%d bytes) %x
+- Payload: (%d bytes) %x
 `,
 		t.SrcPort,
 		t.DstPort,
@@ -59,6 +61,8 @@ func (t *TCPSegment) String() string {
 		t.UrgentPointer,
 		len(t.Options),
 		t.Options,
+		len(t.payload),
+		t.payload,
 	)
 }
 
@@ -78,12 +82,13 @@ func (t *TCPSegment) Parse(data []byte) error {
 	t.WindowSize = binary.BigEndian.Uint16(data[14:16])
 	t.Checksum = binary.BigEndian.Uint16(data[16:18])
 	t.UrgentPointer = binary.BigEndian.Uint16(data[18:headerSizeTCP])
-	t.Options = data[headerSizeTCP:]
+	t.Options = data[headerSizeTCP : t.DataOffset<<2]
+	t.payload = data[t.DataOffset<<2:]
 	return nil
 }
 
-func (t *TCPSegment) NextLayer() string {
-	return ""
+func (t *TCPSegment) NextLayer() (string, []byte) {
+	return nextAppLayer(t.SrcPort, t.DstPort), t.payload
 }
 
 func (t *TCPSegment) flags() string {

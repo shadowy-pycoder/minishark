@@ -22,10 +22,11 @@ type IPv6Packet struct {
 	HopLimit uint8
 	SrcIP    netip.Addr // The unicast IPv6 address of the sending node.
 	DstIP    netip.Addr // The IPv6 unicast or multicast address of the destination node(s).
-	Payload  []byte
+	payload  []byte
 }
 
 func (p *IPv6Packet) String() string {
+	proto, _ := p.NextLayer()
 	return fmt.Sprintf(`IPv6 Packet:
 - Version: %d
 - Traffic Class: %s
@@ -39,13 +40,13 @@ func (p *IPv6Packet) String() string {
 		p.Version,
 		p.trafficClass(),
 		p.PayloadLength,
-		p.NextLayer(),
+		proto,
 		p.NextHeader,
 		p.HopLimit,
 		p.SrcIP,
 		p.DstIP,
-		len(p.Payload),
-		p.Payload,
+		len(p.payload),
+		p.payload,
 	)
 }
 
@@ -63,45 +64,45 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	p.HopLimit = data[7]
 	p.SrcIP, _ = netip.AddrFromSlice(data[8:24])
 	p.DstIP, _ = netip.AddrFromSlice(data[24:headerSizeIPv6])
-	p.Payload = data[headerSizeIPv6:]
+	p.payload = data[headerSizeIPv6:]
 	return nil
 }
 
-// NextLayer returns the type of the next header.
-func (p *IPv6Packet) NextLayer() string {
+// NextLayer returns the type of the next header and payload.
+func (p *IPv6Packet) NextLayer() (string, []byte) {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-	var proto string
+	var layer string
 	switch p.NextHeader {
 	case 0:
-		proto = "HOPOPT"
+		layer = "HOPOPT"
 	case 6:
-		proto = "TCP"
+		layer = "TCP"
 	case 17:
-		proto = "UDP"
+		layer = "UDP"
 	case 43:
-		proto = "Route"
+		layer = "Route"
 	case 44:
-		proto = "Fragment"
+		layer = "Fragment"
 	case 50:
-		proto = "Encapsulating Security Payload"
+		layer = "Encapsulating Security payload"
 	case 51:
-		proto = "Authentication Header"
+		layer = "Authentication Header"
 	case 58:
-		proto = "ICMPv6"
+		layer = "ICMPv6"
 	case 59:
-		proto = "NoNxt"
+		layer = "NoNxt"
 	case 60:
-		proto = "Opts"
+		layer = "Opts"
 	case 135:
-		proto = "Mobility"
+		layer = "Mobility"
 	case 139:
-		proto = "Host Identity Protocol"
+		layer = "Host Identity Protocol"
 	case 140:
-		proto = "Shim6 Protocol"
+		layer = "Shim6 Protocol"
 	default:
-		proto = "Unknown"
+		layer = ""
 	}
-	return proto
+	return layer, p.payload
 }
 
 func (p *IPv6Packet) trafficClass() string {

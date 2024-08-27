@@ -82,6 +82,10 @@ func (ap *ARPPacket) Parse(data []byte) error {
 	return nil
 }
 
+func (ap *ARPPacket) NextLayer() (string, []byte) {
+	return "", nil
+}
+
 func (ap *ARPPacket) ptype() string {
 	var proto string
 	switch ap.ProtocolType {

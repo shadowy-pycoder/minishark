@@ -24,10 +24,11 @@ type IPv4Packet struct {
 	SrcIP          netip.Addr // IPv4 address of the sender of the packet.
 	DstIP          netip.Addr // IPv4 address of the receiver of the packet.
 	Options        []byte     // if ihl > 5
-	Payload        []byte
+	payload        []byte
 }
 
 func (p *IPv4Packet) String() string {
+	proto, _ := p.NextLayer()
 	return fmt.Sprintf(`IPv4 Packet:
 - Version: %d
 - IHL: %d
@@ -55,14 +56,14 @@ func (p *IPv4Packet) String() string {
 		p.flags(),
 		p.FragmentOffset,
 		p.TTL,
-		p.NextLayer(),
+		proto,
 		p.Protocol,
 		p.HeaderChecksum,
 		p.SrcIP,
 		p.DstIP,
 		p.Options,
-		len(p.Payload),
-		p.Payload)
+		len(p.payload),
+		p.payload)
 }
 
 // Parse parses the given byte data into an IPv4 packet struct.
@@ -89,27 +90,27 @@ func (p *IPv4Packet) Parse(data []byte) error {
 	if p.IHL > 5 {
 		offset := headerSizeIPv4 + ((p.IHL - 5) << 2)
 		p.Options = data[headerSizeIPv4:offset]
-		p.Payload = data[offset:]
+		p.payload = data[offset:]
 	} else {
-		p.Payload = data[headerSizeIPv4:]
+		p.payload = data[headerSizeIPv4:]
 	}
 	return nil
 }
 
-func (p *IPv4Packet) NextLayer() string {
+func (p *IPv4Packet) NextLayer() (string, []byte) {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-	var proto string
+	var layer string
 	switch p.Protocol {
 	case 1:
-		proto = "ICMP"
+		layer = "ICMP"
 	case 6:
-		proto = "TCP"
+		layer = "TCP"
 	case 17:
-		proto = "UDP"
+		layer = "UDP"
 	default:
-		proto = "Unknown"
+		layer = ""
 	}
-	return proto
+	return layer, p.payload
 }
 
 func (p *IPv4Packet) dscp() string {

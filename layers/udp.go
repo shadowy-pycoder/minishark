@@ -13,7 +13,7 @@ type UDPSegment struct {
 	DstPort   uint16 // Identifies the receiving port.
 	UDPLength uint16 // Specifies the length in bytes of the UDP header and UDP data.
 	Checksum  uint16 // The checksum field may be used for error-checking of the header and data.
-	Payload   []byte
+	payload   []byte
 }
 
 func (u *UDPSegment) String() string {
@@ -28,8 +28,8 @@ func (u *UDPSegment) String() string {
 		u.DstPort,
 		u.UDPLength,
 		u.Checksum,
-		len(u.Payload),
-		u.Payload,
+		len(u.payload),
+		u.payload,
 	)
 }
 
@@ -42,10 +42,10 @@ func (u *UDPSegment) Parse(data []byte) error {
 	u.DstPort = binary.BigEndian.Uint16(data[2:4])
 	u.UDPLength = binary.BigEndian.Uint16(data[4:6])
 	u.Checksum = binary.BigEndian.Uint16(data[6:headerSizeUDP])
-	u.Payload = data[headerSizeUDP:]
+	u.payload = data[headerSizeUDP:]
 	return nil
 }
 
-func (u *UDPSegment) NextLayer() string {
-	return ""
+func (u *UDPSegment) NextLayer() (string, []byte) {
+	return nextAppLayer(u.SrcPort, u.DstPort), u.payload
 }
