@@ -16,6 +16,14 @@ import (
 
 const unixEthPAll int = 0x03
 
+var colorMap = map[int]string{
+	0: "\033[37m",
+	1: "\033[36m",
+	2: "\033[32m",
+	3: "\033[33m",
+	4: "\033[35m",
+}
+
 var _ PacketWriter = &Writer{}
 
 type PacketWriter interface {
@@ -34,11 +42,28 @@ type Config struct {
 type Writer struct {
 	w       io.Writer
 	packets uint64
+	stdout  bool
 }
 
 // NewWriter creates a new mshark Writer.
 func NewWriter(w io.Writer) *Writer {
-	return &Writer{w: w}
+	var stdout bool
+	if w == os.Stdout {
+		stdout = true
+	}
+	return &Writer{w: w, stdout: stdout}
+}
+
+// printPacket prints a layer packet to the writer. If the writer is an instance of os.Stdout,
+// the packet will be printed with color, based on the layerNum.
+func (mw *Writer) printPacket(layer layers.Layer, layerNum int) {
+	packet := layer.String()
+	if mw.stdout {
+		if color, ok := colorMap[layerNum]; ok {
+			packet = color + packet + "\033[0m"
+		}
+	}
+	fmt.Fprintln(mw.w, packet)
 }
 
 // WritePacket writes a packet to the writer, along with its timestamp.
@@ -52,7 +77,8 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	if err := next.Parse(data); err != nil {
 		return err
 	}
-	fmt.Fprintln(mw.w, next.String())
+	var layerNum int
+	mw.printPacket(next, layerNum)
 	for {
 		name, data := next.NextLayer()
 		if name == "" {
@@ -62,7 +88,8 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 		if err := next.Parse(data); err != nil {
 			return err
 		}
-		fmt.Fprintln(mw.w, next.String())
+		layerNum++
+		mw.printPacket(next, layerNum)
 	}
 }
 

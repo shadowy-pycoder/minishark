@@ -44,7 +44,7 @@ func (p *IPv4Packet) String() string {
 - SrcIP: %s
 - DstIP: %s
 - Options: %v
-- Payload: (%d bytes) %x
+- Payload: %d bytes
 `,
 		p.Version,
 		p.IHL,
@@ -63,7 +63,7 @@ func (p *IPv4Packet) String() string {
 		p.DstIP,
 		p.Options,
 		len(p.payload),
-		p.payload)
+	)
 }
 
 // Parse parses the given byte data into an IPv4 packet struct.

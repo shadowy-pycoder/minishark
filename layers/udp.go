@@ -22,14 +22,13 @@ func (u *UDPSegment) String() string {
 - DstPort: %d
 - UDP Length: %d
 - Checksum: %#04x
-- Payload: (%d bytes) %x
+- Payload: %d bytes
 `,
 		u.SrcPort,
 		u.DstPort,
 		u.UDPLength,
 		u.Checksum,
 		len(u.payload),
-		u.payload,
 	)
 }
 

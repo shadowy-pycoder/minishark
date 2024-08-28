@@ -26,7 +26,6 @@ type IPv6Packet struct {
 }
 
 func (p *IPv6Packet) String() string {
-	proto, _ := p.NextLayer()
 	return fmt.Sprintf(`IPv6 Packet:
 - Version: %d
 - Traffic Class: %s
@@ -35,18 +34,17 @@ func (p *IPv6Packet) String() string {
 - Hop Limit: %d
 - SrcIP: %s
 - DstIP: %s
-- Payload: (%d bytes) %x 
+- Payload: %d bytes
 `,
 		p.Version,
 		p.trafficClass(),
 		p.PayloadLength,
-		proto,
+		p.nextHeader(),
 		p.NextHeader,
 		p.HopLimit,
 		p.SrcIP,
 		p.DstIP,
 		len(p.payload),
-		p.payload,
 	)
 }
 
@@ -68,41 +66,56 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	return nil
 }
 
-// NextLayer returns the type of the next header and payload.
 func (p *IPv6Packet) NextLayer() (string, []byte) {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 	var layer string
 	switch p.NextHeader {
-	case 0:
-		layer = "HOPOPT"
 	case 6:
 		layer = "TCP"
 	case 17:
 		layer = "UDP"
-	case 43:
-		layer = "Route"
-	case 44:
-		layer = "Fragment"
-	case 50:
-		layer = "Encapsulating Security payload"
-	case 51:
-		layer = "Authentication Header"
 	case 58:
 		layer = "ICMPv6"
-	case 59:
-		layer = "NoNxt"
-	case 60:
-		layer = "Opts"
-	case 135:
-		layer = "Mobility"
-	case 139:
-		layer = "Host Identity Protocol"
-	case 140:
-		layer = "Shim6 Protocol"
 	default:
 		layer = ""
 	}
 	return layer, p.payload
+}
+
+func (p *IPv6Packet) nextHeader() string {
+	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+	var header string
+	switch p.NextHeader {
+	case 0:
+		header = "HOPOPT"
+	case 6:
+		header = "TCP"
+	case 17:
+		header = "UDP"
+	case 43:
+		header = "Route"
+	case 44:
+		header = "Fragment"
+	case 50:
+		header = "Encapsulating Security payload"
+	case 51:
+		header = "Authentication Header"
+	case 58:
+		header = "ICMPv6"
+	case 59:
+		header = "NoNxt"
+	case 60:
+		header = "Opts"
+	case 135:
+		header = "Mobility"
+	case 139:
+		header = "Host Identity Protocol"
+	case 140:
+		header = "Shim6 Protocol"
+	default:
+		header = ""
+	}
+	return header
 }
 
 func (p *IPv6Packet) trafficClass() string {

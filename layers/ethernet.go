@@ -23,14 +23,13 @@ func (ef *EthernetFrame) String() string {
 - DstMAC: %s
 - SrcMAC: %s
 - EtherType: %s (%#04x)
-- Payload: (%d bytes) %x 
+- Payload: %d bytes 
 %s`,
 		ef.DstMAC,
 		ef.SrcMAC,
 		ethType,
 		ef.EtherType,
 		len(ef.payload),
-		ef.payload,
 		hex.Dump(ef.payload))
 }
 

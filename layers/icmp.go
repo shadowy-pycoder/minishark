@@ -15,7 +15,7 @@ type ICMPSegment struct {
 	// Internet checksum (RFC 1071) for error checking, calculated from the ICMP header
 	// and data with value 0 substituted for this field.
 	Checksum uint16
-	Payload  []byte // Contents vary based on the ICMP type and code.
+	Data     []byte // Contents vary based on the ICMP type and code.
 }
 
 func (i *ICMPSegment) String() string {
@@ -31,7 +31,7 @@ func (i *ICMPSegment) String() string {
 		i.Code,
 		code,
 		i.Checksum,
-		i.payload(),
+		i.data(),
 	)
 }
 
@@ -43,7 +43,7 @@ func (i *ICMPSegment) Parse(data []byte) error {
 	i.Type = data[0]
 	i.Code = data[1]
 	i.Checksum = binary.BigEndian.Uint16(data[2:4])
-	i.Payload = data[headerSizeICMP:]
+	i.Data = data[headerSizeICMP:]
 	var pLen int
 	switch i.Type {
 	case 0, 3, 5, 8, 11:
@@ -51,9 +51,9 @@ func (i *ICMPSegment) Parse(data []byte) error {
 	case 13, 14:
 		pLen = 16
 	default:
-		pLen = len(i.Payload)
+		pLen = len(i.Data)
 	}
-	if len(i.Payload) < pLen {
+	if len(i.Data) < pLen {
 		return fmt.Errorf("minimum payload length for ICMP with type %d is %d bytes", i.Type, pLen)
 	}
 	return nil
@@ -183,39 +183,39 @@ func (i *ICMPSegment) typecode() (string, string) {
 	return mtype, code
 }
 
-func (i *ICMPSegment) payload() string {
-	var payload string
+func (i *ICMPSegment) data() string {
+	var data string
 	switch i.Type {
 	case 0, 8:
-		payload = fmt.Sprintf(`- Identifier: %d
+		data = fmt.Sprintf(`- Identifier: %d
 - Sequence Number: %d
 - Data: (%d bytes) %x`,
-			binary.BigEndian.Uint16(i.Payload[0:2]),
-			binary.BigEndian.Uint16(i.Payload[2:4]),
-			len(i.Payload[4:]), i.Payload[4:])
+			binary.BigEndian.Uint16(i.Data[0:2]),
+			binary.BigEndian.Uint16(i.Data[2:4]),
+			len(i.Data[4:]), i.Data[4:])
 	case 3, 11:
-		payload = fmt.Sprintf(`- Reserved: %#08x
+		data = fmt.Sprintf(`- Reserved: %#08x
 - Data: (%d bytes) %x`,
-			binary.BigEndian.Uint32(i.Payload[0:4]), len(i.Payload[4:]), i.Payload[4:])
+			binary.BigEndian.Uint32(i.Data[0:4]), len(i.Data[4:]), i.Data[4:])
 	case 5:
-		gatewayAddress, _ := netip.AddrFromSlice(i.Payload[0:4])
-		payload = fmt.Sprintf(`- Gateway Address: %s
-- Data: (%d bytes) %x`, gatewayAddress, len(i.Payload[4:]), i.Payload[4:])
+		gatewayAddress, _ := netip.AddrFromSlice(i.Data[0:4])
+		data = fmt.Sprintf(`- Gateway Address: %s
+- Data: (%d bytes) %x`, gatewayAddress, len(i.Data[4:]), i.Data[4:])
 	case 13, 14:
-		payload = fmt.Sprintf(`- Identifier: %d
+		data = fmt.Sprintf(`- Identifier: %d
 - Sequence Number: %d
 - Originate Timestamp: %d
 - Receive Timestamp: %d
 - Transmit Timestamp: %d
 `,
-			binary.BigEndian.Uint16(i.Payload[0:2]),
-			binary.BigEndian.Uint16(i.Payload[2:4]),
-			binary.BigEndian.Uint32(i.Payload[4:8]),
-			binary.BigEndian.Uint32(i.Payload[8:12]),
-			binary.BigEndian.Uint32(i.Payload[12:16]),
+			binary.BigEndian.Uint16(i.Data[0:2]),
+			binary.BigEndian.Uint16(i.Data[2:4]),
+			binary.BigEndian.Uint32(i.Data[4:8]),
+			binary.BigEndian.Uint32(i.Data[8:12]),
+			binary.BigEndian.Uint32(i.Data[12:16]),
 		)
 	default:
-		payload = fmt.Sprintf(`- Data: (%d bytes) %x`, len(i.Payload), i.Payload)
+		data = fmt.Sprintf(`- Data: (%d bytes) %x`, len(i.Data), i.Data)
 	}
-	return payload
+	return data
 }

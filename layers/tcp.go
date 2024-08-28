@@ -46,7 +46,7 @@ func (t *TCPSegment) String() string {
 - Checksum: %#04x
 - Urgent Pointer: %d
 - Options: (%d bytes) %x
-- Payload: (%d bytes) %x
+- Payload: %d bytes
 `,
 		t.SrcPort,
 		t.DstPort,
@@ -62,7 +62,6 @@ func (t *TCPSegment) String() string {
 		len(t.Options),
 		t.Options,
 		len(t.payload),
-		t.payload,
 	)
 }
 

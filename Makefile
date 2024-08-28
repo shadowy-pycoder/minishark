@@ -12,5 +12,5 @@ create:
 	go test -c -race && sudo setcap cap_net_raw+ep mshark.test
 
 bench: create
-	./mshark.test -test.bench=. -test.benchmem -test.run=^$$ -test.benchtime 10000x \
+	./mshark.test -test.bench=. -test.benchmem -test.run=^$$ -test.benchtime 1000x \
 	-test.cpuprofile='cpu.prof' -test.memprofile='mem.prof'

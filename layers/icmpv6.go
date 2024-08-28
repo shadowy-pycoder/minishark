@@ -13,7 +13,7 @@ type ICMPv6Segment struct {
 	Type     uint8
 	Code     uint8
 	Checksum uint16
-	Payload  []byte
+	Data     []byte
 }
 
 func (i *ICMPv6Segment) String() string {
@@ -29,7 +29,7 @@ func (i *ICMPv6Segment) String() string {
 		i.Code,
 		code,
 		i.Checksum,
-		i.payload(),
+		i.data(),
 	)
 }
 
@@ -41,7 +41,7 @@ func (i *ICMPv6Segment) Parse(data []byte) error {
 	i.Type = data[0]
 	i.Code = data[1]
 	i.Checksum = binary.BigEndian.Uint16(data[2:headerSizeICMPv6])
-	i.Payload = data[headerSizeICMPv6:]
+	i.Data = data[headerSizeICMPv6:]
 	var pLen int
 	switch i.Type {
 	case 1, 2, 3, 4, 128, 129, 133:
@@ -53,9 +53,9 @@ func (i *ICMPv6Segment) Parse(data []byte) error {
 	case 137:
 		pLen = 36
 	default:
-		pLen = len(i.Payload)
+		pLen = len(i.Data)
 	}
-	if len(i.Payload) < pLen {
+	if len(i.Data) < pLen {
 		return fmt.Errorf("minimum payload length for ICMPv6 with type %d is %d bytes", i.Type, pLen)
 	}
 	return nil
@@ -227,43 +227,43 @@ func (i *ICMPv6Segment) typecode() (string, string) {
 	return mtype, code
 }
 
-func (i *ICMPv6Segment) payload() string {
-	var payload string
+func (i *ICMPv6Segment) data() string {
+	var data string
 	switch i.Type {
 	case 1, 3:
-		payload = fmt.Sprintf(`- Reserved: %#08x
+		data = fmt.Sprintf(`- Reserved: %#08x
 - Data: (%d bytes) %x`,
-			binary.BigEndian.Uint32(i.Payload[0:4]), len(i.Payload[4:]), i.Payload[4:])
+			binary.BigEndian.Uint32(i.Data[0:4]), len(i.Data[4:]), i.Data[4:])
 	case 2:
-		payload = fmt.Sprintf(`- MTU: %d
+		data = fmt.Sprintf(`- MTU: %d
 - Data: (%d bytes) %x`,
-			binary.BigEndian.Uint32(i.Payload[0:4]), len(i.Payload[4:]), i.Payload[4:])
+			binary.BigEndian.Uint32(i.Data[0:4]), len(i.Data[4:]), i.Data[4:])
 	case 4:
-		payload = fmt.Sprintf(`- Pointer: %d
+		data = fmt.Sprintf(`- Pointer: %d
 - Data: (%d bytes) %x`,
-			binary.BigEndian.Uint32(i.Payload[0:4]), len(i.Payload[4:]), i.Payload[4:])
+			binary.BigEndian.Uint32(i.Data[0:4]), len(i.Data[4:]), i.Data[4:])
 	case 128, 129:
-		payload = fmt.Sprintf(`- Identifier: %d
+		data = fmt.Sprintf(`- Identifier: %d
 - Sequence Number: %d
 - Data: (%d bytes) %x`,
-			binary.BigEndian.Uint16(i.Payload[0:2]),
-			binary.BigEndian.Uint16(i.Payload[2:4]),
-			len(i.Payload[4:]), i.Payload[4:])
+			binary.BigEndian.Uint16(i.Data[0:2]),
+			binary.BigEndian.Uint16(i.Data[2:4]),
+			len(i.Data[4:]), i.Data[4:])
 	case 133:
-		payload = fmt.Sprintf(`- Reserved: %#08x
+		data = fmt.Sprintf(`- Reserved: %#08x
 - Options: (%d bytes) %x`,
-			binary.BigEndian.Uint32(i.Payload[0:4]), len(i.Payload[4:]), i.Payload[4:])
+			binary.BigEndian.Uint32(i.Data[0:4]), len(i.Data[4:]), i.Data[4:])
 	case 134:
-		hopLimit := i.Payload[0]
-		flags := i.Payload[1]
+		hopLimit := i.Data[0]
+		flags := i.Data[1]
 		managedAddress := (flags >> 7) & 1
 		otherConfiguration := (flags >> 6) & 1
 		reserved := flags & (1<<6 - 1)
-		routerLifetime := binary.BigEndian.Uint16(i.Payload[2:4])
-		reachableTime := binary.BigEndian.Uint32(i.Payload[4:8])
-		retransTime := binary.BigEndian.Uint32(i.Payload[8:12])
-		options := i.Payload[12:]
-		payload = fmt.Sprintf(`- Cur Hop Limit: %d
+		routerLifetime := binary.BigEndian.Uint16(i.Data[2:4])
+		reachableTime := binary.BigEndian.Uint32(i.Data[4:8])
+		retransTime := binary.BigEndian.Uint32(i.Data[8:12])
+		options := i.Data[12:]
+		data = fmt.Sprintf(`- Cur Hop Limit: %d
 - Managed Address Flag: %d
 - Other Configuration Flag: %d
 - Reserved: %#06b
@@ -281,19 +281,19 @@ func (i *ICMPv6Segment) payload() string {
 			len(options),
 			options)
 	case 135:
-		address, _ := netip.AddrFromSlice(i.Payload[4:20])
-		payload = fmt.Sprintf(`- Reserved: %#08x
+		address, _ := netip.AddrFromSlice(i.Data[4:20])
+		data = fmt.Sprintf(`- Reserved: %#08x
 - Target Address: %s
 - Options: (%d bytes) %x`,
-			binary.BigEndian.Uint32(i.Payload[0:4]), address, len(i.Payload[20:]), i.Payload[20:])
+			binary.BigEndian.Uint32(i.Data[0:4]), address, len(i.Data[20:]), i.Data[20:])
 	case 136:
-		flags := binary.BigEndian.Uint32(i.Payload[0:4])
+		flags := binary.BigEndian.Uint32(i.Data[0:4])
 		fromRouter := (flags >> 31) & 1
 		solicited := (flags >> 30) & 1
 		override := (flags >> 29) & 1
 		reserved := flags & (1<<29 - 1)
-		address, _ := netip.AddrFromSlice(i.Payload[4:20])
-		payload = fmt.Sprintf(`- From Router Flag: %d
+		address, _ := netip.AddrFromSlice(i.Data[4:20])
+		data = fmt.Sprintf(`- From Router Flag: %d
 - Solicited Flag: %d
 - Override Flag: %d
 - Reserved: %#029b
@@ -304,22 +304,22 @@ func (i *ICMPv6Segment) payload() string {
 			override,
 			reserved,
 			address,
-			len(i.Payload[20:]),
-			i.Payload[20:])
+			len(i.Data[20:]),
+			i.Data[20:])
 	case 137:
-		targetAddress, _ := netip.AddrFromSlice(i.Payload[4:20])
-		dstAddress, _ := netip.AddrFromSlice(i.Payload[20:36])
-		payload = fmt.Sprintf(`- Reserved: %#08x
+		targetAddress, _ := netip.AddrFromSlice(i.Data[4:20])
+		dstAddress, _ := netip.AddrFromSlice(i.Data[20:36])
+		data = fmt.Sprintf(`- Reserved: %#08x
 - Target Address: %s
 - Destination Address: %s
 - Options: (%d bytes) %x`,
-			binary.BigEndian.Uint32(i.Payload[0:4]),
+			binary.BigEndian.Uint32(i.Data[0:4]),
 			targetAddress,
 			dstAddress,
-			len(i.Payload[36:]),
-			i.Payload[36:])
+			len(i.Data[36:]),
+			i.Data[36:])
 	default:
-		payload = fmt.Sprintf(`- Data: (%d bytes) %x`, len(i.Payload), i.Payload)
+		data = fmt.Sprintf(`- Data: (%d bytes) %x`, len(i.Data), i.Data)
 	}
-	return payload
+	return data
 }

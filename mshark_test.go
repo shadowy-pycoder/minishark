@@ -14,7 +14,6 @@ func BenchmarkOpenLive(b *testing.B) {
 	conf := Config{
 		Device:      in,
 		Snaplen:     1600,
-		Promisc:     true,
 		PacketCount: b.N,
 	}
 	pw := NewWriter(io.Discard)
