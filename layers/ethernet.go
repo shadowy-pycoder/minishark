@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-const ethernetHeaderSize = 14
+const headerSizeEthernet = 14
 
 // An Ethernet frame is a data link layer protocol data unit.
 type EthernetFrame struct {
@@ -35,13 +35,13 @@ func (ef *EthernetFrame) String() string {
 
 // Parse parses the given byte data into an Ethernet frame.
 func (ef *EthernetFrame) Parse(data []byte) error {
-	if len(data) < ethernetHeaderSize {
+	if len(data) < headerSizeEthernet {
 		return fmt.Errorf("did not read a complete Ethernet frame, only %d bytes read", len(data))
 	}
 	ef.DstMAC = net.HardwareAddr(data[0:6])
 	ef.SrcMAC = net.HardwareAddr(data[6:12])
 	ef.EtherType = binary.BigEndian.Uint16(data[12:14])
-	ef.payload = data[ethernetHeaderSize:]
+	ef.payload = data[headerSizeEthernet:]
 	return nil
 }
 
