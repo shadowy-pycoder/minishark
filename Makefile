@@ -14,3 +14,6 @@ create:
 bench: create
 	./mshark.test -test.bench=. -test.benchmem -test.run=^$$ -test.benchtime 1000x \
 	-test.cpuprofile='cpu.prof' -test.memprofile='mem.prof'
+
+clear:
+	rm -v *.txt *.pcap*
