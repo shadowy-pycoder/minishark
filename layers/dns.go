@@ -39,7 +39,7 @@ func (d *DNSMessage) String() string {
 		d.AuthorityRRs,
 		d.AdditionalRRs,
 		len(d.payload),
-		d.queries(),
+		d.rrecords(),
 	)
 }
 
@@ -147,39 +147,40 @@ func bytesToStr(myBytes []byte) string {
 	return unsafe.String(unsafe.SliceData(myBytes), len(myBytes))
 }
 
-func extractDomain(data []byte, offset int) (string, int) {
-	var parts []string
+func extractDomain(data []byte, tail []byte) (string, []byte) {
+	var domainName string
 	for {
-		blen := int(data[offset])
-		offset++
+		blen := tail[0]
+		if blen>>6 == 0b11 {
+			offset := binary.BigEndian.Uint16(tail[0:2])&(1<<14-1) - headerSizeDNS
+			part, _ := extractDomain(data, data[offset:])
+			domainName += part
+			tail = tail[2:]
+			break
+		}
+		tail = tail[1:]
 		if blen == 0 {
 			break
 		}
-		if blen == 0xc0 {
-			offset = int(data[offset]) - headerSizeDNS
-			blen = int(data[offset])
-			offset++
-		}
-		parts = append(parts, bytesToStr(data[offset:offset+blen]))
-		offset += blen
+		domainName += bytesToStr(tail[0:blen])
+		domainName += "."
+
+		tail = tail[blen:]
 	}
-	return strings.Join(parts, "."), offset
+	return domainName, tail
 }
 
-func (d *DNSMessage) queries() string {
-	var (
-		sb     strings.Builder
-		offset int
-	)
+func (d *DNSMessage) rrecords() string {
+	var sb strings.Builder
+	tail := d.payload
 	if d.Questions > 0 {
 		sb.WriteString("- Queries:\n")
 		for range d.Questions {
 			var domain string
-			domain, offset = extractDomain(d.payload, offset)
-			typ := binary.BigEndian.Uint16(d.payload[offset : offset+2])
-			offset += 2
-			class := binary.BigEndian.Uint16(d.payload[offset : offset+2])
-			offset += 2
+			domain, tail = extractDomain(d.payload, tail)
+			typ := binary.BigEndian.Uint16(tail[0:2])
+			class := binary.BigEndian.Uint16(tail[2:4])
+			tail = tail[4:]
 			// TODO: add type and class description https://en.wikipedia.org/wiki/List_of_DNS_record_types
 			sb.WriteString(fmt.Sprintf("  %s: type %d class %d\n", domain, typ, class))
 		}
@@ -187,27 +188,56 @@ func (d *DNSMessage) queries() string {
 	if d.AnswerRRs > 0 {
 		sb.WriteString("- Answers:\n")
 		for range d.AnswerRRs {
-			no := binary.BigEndian.Uint16(d.payload[offset : offset+2])
-			offset += 2
-			domain, _ := extractDomain(d.payload, int(no&0xFF)-headerSizeDNS)
-			typ := binary.BigEndian.Uint16(d.payload[offset : offset+2])
-			offset += 2
-			class := binary.BigEndian.Uint16(d.payload[offset : offset+2])
-			offset += 2
-			ttl := binary.BigEndian.Uint32(d.payload[offset : offset+4])
-			offset += 4
-			rdl := int(binary.BigEndian.Uint16(d.payload[offset : offset+2]))
-			offset += 2
+			var domain string
+			domain, tail = extractDomain(d.payload, tail)
+			typ := binary.BigEndian.Uint16(tail[0:2])
+			class := binary.BigEndian.Uint16(tail[2:4])
+			ttl := binary.BigEndian.Uint32(tail[4:8])
+			rdl := int(binary.BigEndian.Uint16(tail[8:10]))
 			//rdata := d.payload[offset : offset+rdl]
-			offset += rdl
-			sb.WriteString(fmt.Sprintf("  %s: type %d class %d ttl %d rdl %d\n", domain, typ, class, ttl, rdl))
+			tail = tail[10+rdl:]
+			sb.WriteString(fmt.Sprintf("  %s: type %d class %d ttl %08x rdl %04x\n", domain, typ, class, ttl, rdl))
 		}
 	}
 	if d.AuthorityRRs > 0 {
-
+		sb.WriteString("- Authoritative nameservers:\n")
+		for range d.AuthorityRRs {
+			var domain string
+			domain, tail = extractDomain(d.payload, tail)
+			typ := binary.BigEndian.Uint16(tail[0:2])
+			class := binary.BigEndian.Uint16(tail[2:4])
+			ttl := binary.BigEndian.Uint32(tail[4:8])
+			rdl := int(binary.BigEndian.Uint16(tail[8:10]))
+			//rdata := d.payload[offset : offset+rdl]
+			tail = tail[10+rdl:]
+			sb.WriteString(fmt.Sprintf("  %s: type %d class %d ttl %d rdl %d\n", domain, typ, class, ttl, rdl))
+		}
 	}
 	if d.AdditionalRRs > 0 {
+		sb.WriteString("- Additional records:\n")
+		for range d.AdditionalRRs {
+			if tail[0] != 0 {
+				var domain string
+				domain, tail = extractDomain(d.payload, tail)
+				typ := binary.BigEndian.Uint16(tail[0:2])
+				class := binary.BigEndian.Uint16(tail[2:4])
+				ttl := binary.BigEndian.Uint32(tail[4:8])
+				rdl := int(binary.BigEndian.Uint16(tail[8:10]))
+				//rdata := d.payload[offset : offset+rdl]
+				tail = tail[10+rdl:]
+				sb.WriteString(fmt.Sprintf("  %s: type %d class %d ttl %d rdl %d\n", domain, typ, class, ttl, rdl))
+			} else {
+				tail = tail[1:]
+				typ := binary.BigEndian.Uint16(tail[0:2])
+				ups := binary.BigEndian.Uint16(tail[2:4])
+				t1 := tail[4]
+				zres := binary.BigEndian.Uint16(tail[5:7])
+				rdl := int(binary.BigEndian.Uint16(tail[7:9]))
+				tail = tail[9+rdl:]
+				sb.WriteString(fmt.Sprintf("  Root: type %d UDP payload size %d t1 %d zres %d rdl %d\n", typ, ups, t1, zres, rdl))
+			}
 
+		}
 	}
 	return sb.String()
 }
