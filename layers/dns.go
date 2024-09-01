@@ -3,6 +3,7 @@ package layers
 import (
 	"encoding/binary"
 	"fmt"
+	"net/netip"
 	"strings"
 	"unsafe"
 )
@@ -147,13 +148,13 @@ func bytesToStr(myBytes []byte) string {
 	return unsafe.String(unsafe.SliceData(myBytes), len(myBytes))
 }
 
-func extractDomain(data []byte, tail []byte) (string, []byte) {
+func (d *DNSMessage) extractDomain(tail []byte) (string, []byte) {
 	var domainName string
 	for {
 		blen := tail[0]
 		if blen>>6 == 0b11 {
 			offset := binary.BigEndian.Uint16(tail[0:2])&(1<<14-1) - headerSizeDNS
-			part, _ := extractDomain(data, data[offset:])
+			part, _ := d.extractDomain(d.payload[offset:])
 			domainName += part
 			tail = tail[2:]
 			break
@@ -167,76 +168,162 @@ func extractDomain(data []byte, tail []byte) (string, []byte) {
 
 		tail = tail[blen:]
 	}
-	return domainName, tail
+	return strings.TrimRight(domainName, "."), tail
+}
+
+func (d *DNSMessage) parseRData(typ uint16, tail []byte, rdl int) (string, string, []byte) {
+	var rdata string
+	var typname string
+	switch typ {
+	case 1:
+		typname = "A"
+		addr, _ := netip.AddrFromSlice(tail[0:rdl])
+		rdata = fmt.Sprintf("Address: %s", addr)
+	case 2:
+		typname = "NS"
+		domain, _ := d.extractDomain(tail)
+		rdata = fmt.Sprintf("%s: %s", typname, domain)
+	case 5:
+		typname = "CNAME"
+		domain, _ := d.extractDomain(tail)
+		rdata = fmt.Sprintf("%s: %s", typname, domain)
+	case 6:
+		typname = "SOA"
+		var (
+			primary string
+			mailbox string
+		)
+		ttail := tail
+		primary, ttail = d.extractDomain(ttail)
+		mailbox, ttail = d.extractDomain(ttail)
+		serial := binary.BigEndian.Uint32(ttail[0:4])
+		refresh := binary.BigEndian.Uint32(ttail[4:8])
+		retry := binary.BigEndian.Uint32(ttail[8:12])
+		expire := binary.BigEndian.Uint32(ttail[12:16])
+		min := binary.BigEndian.Uint32(ttail[16:20])
+		rdata = fmt.Sprintf(`Primary name server: %s 
+    - Responsible authority's mailbox: %s
+    - Serial number: %d
+    - Refresh interval: %d
+    - Retry interval: %d
+    - Expire limit: %d
+    - Minimum TTL: %d
+	`, primary, mailbox, serial, refresh, retry, expire, min)
+	case 15:
+		typname = "MX"
+		preference := binary.BigEndian.Uint16(tail[0:2])
+		domain, _ := d.extractDomain(tail[2:rdl])
+		rdata = fmt.Sprintf("%s: preference %d %s", typname, preference, domain)
+	case 16:
+		typname = "TXT"
+		rdata = fmt.Sprintf("%s: %s", typname, tail[:rdl])
+	case 28:
+		typname = "AAAA"
+		addr, _ := netip.AddrFromSlice(tail[0:rdl])
+		rdata = fmt.Sprintf("Address: %s", addr)
+	case 41:
+		typname = "OPT"
+	default:
+		rdata = fmt.Sprintf("Unknown: %d bytes", rdl)
+	}
+	return typname, rdata, tail[rdl:]
+}
+
+func (d *DNSMessage) parseQuery(tail []byte) (string, []byte) {
+	var domain string
+	domain, tail = d.extractDomain(tail)
+	typ := binary.BigEndian.Uint16(tail[0:2])
+	class := binary.BigEndian.Uint16(tail[2:4])
+	tail = tail[4:]
+	// TODO: add type and class description https://en.wikipedia.org/wiki/List_of_DNS_record_types
+	return fmt.Sprintf(`  - %s: 
+    - Name: %s
+    - Type: (%d)
+    - Class: %d
+`, domain, domain, typ, class), tail
+}
+
+func (d *DNSMessage) parseRR(tail []byte) (string, []byte) {
+	var domain string
+	domain, tail = d.extractDomain(tail)
+	typ := binary.BigEndian.Uint16(tail[0:2])
+	class := binary.BigEndian.Uint16(tail[2:4])
+	ttl := binary.BigEndian.Uint32(tail[4:8])
+	rdl := int(binary.BigEndian.Uint16(tail[8:10]))
+	var (
+		typename string
+		rdata    string
+	)
+	typename, rdata, tail = d.parseRData(typ, tail[10:], rdl)
+	return fmt.Sprintf(`  - %s:     
+    - Name: %s
+    - Type: %s (%d)
+    - Class: %d
+    - TTL: %d
+    - Data Length: %d
+    - %s
+`, domain, domain, typename, typ, class, ttl, rdl, rdata), tail
+}
+
+func (d *DNSMessage) parseRoot(tail []byte) (string, []byte) {
+	domain := "Root"
+	tail = tail[1:]
+	typ := binary.BigEndian.Uint16(tail[0:2])
+	ups := binary.BigEndian.Uint16(tail[2:4])
+	hb := tail[4]
+	ednsv := tail[5]
+	zres := binary.BigEndian.Uint16(tail[6:8])
+	rdl := int(binary.BigEndian.Uint16(tail[8:10]))
+	var typename string
+	typename, _, tail = d.parseRData(typ, tail[10:], rdl)
+	return fmt.Sprintf(`  - %s: 
+    - Name: %s
+    - Type: %s (%d)
+    - UDP payload size: %d
+    - Higher bits in extended RCODE: %#02x
+    - EDNS0 version: %d
+    - Z: %d
+    - Data Length: %d
+`, domain, domain, typename, typ, ups, hb, ednsv, zres, rdl), tail
 }
 
 func (d *DNSMessage) rrecords() string {
-	var sb strings.Builder
-	tail := d.payload
+	var (
+		sb   strings.Builder
+		rec  string
+		tail = d.payload
+	)
 	if d.Questions > 0 {
 		sb.WriteString("- Queries:\n")
 		for range d.Questions {
-			var domain string
-			domain, tail = extractDomain(d.payload, tail)
-			typ := binary.BigEndian.Uint16(tail[0:2])
-			class := binary.BigEndian.Uint16(tail[2:4])
-			tail = tail[4:]
-			// TODO: add type and class description https://en.wikipedia.org/wiki/List_of_DNS_record_types
-			sb.WriteString(fmt.Sprintf("  %s: type %d class %d\n", domain, typ, class))
+			rec, tail = d.parseQuery(tail)
+			sb.WriteString(rec)
 		}
 	}
 	if d.AnswerRRs > 0 {
 		sb.WriteString("- Answers:\n")
 		for range d.AnswerRRs {
-			var domain string
-			domain, tail = extractDomain(d.payload, tail)
-			typ := binary.BigEndian.Uint16(tail[0:2])
-			class := binary.BigEndian.Uint16(tail[2:4])
-			ttl := binary.BigEndian.Uint32(tail[4:8])
-			rdl := int(binary.BigEndian.Uint16(tail[8:10]))
-			//rdata := d.payload[offset : offset+rdl]
-			tail = tail[10+rdl:]
-			sb.WriteString(fmt.Sprintf("  %s: type %d class %d ttl %08x rdl %04x\n", domain, typ, class, ttl, rdl))
+			rec, tail = d.parseRR(tail)
+			sb.WriteString(rec)
 		}
 	}
 	if d.AuthorityRRs > 0 {
 		sb.WriteString("- Authoritative nameservers:\n")
 		for range d.AuthorityRRs {
-			var domain string
-			domain, tail = extractDomain(d.payload, tail)
-			typ := binary.BigEndian.Uint16(tail[0:2])
-			class := binary.BigEndian.Uint16(tail[2:4])
-			ttl := binary.BigEndian.Uint32(tail[4:8])
-			rdl := int(binary.BigEndian.Uint16(tail[8:10]))
-			//rdata := d.payload[offset : offset+rdl]
-			tail = tail[10+rdl:]
-			sb.WriteString(fmt.Sprintf("  %s: type %d class %d ttl %d rdl %d\n", domain, typ, class, ttl, rdl))
+			rec, tail = d.parseRR(tail)
+			sb.WriteString(rec)
 		}
 	}
 	if d.AdditionalRRs > 0 {
 		sb.WriteString("- Additional records:\n")
 		for range d.AdditionalRRs {
 			if tail[0] != 0 {
-				var domain string
-				domain, tail = extractDomain(d.payload, tail)
-				typ := binary.BigEndian.Uint16(tail[0:2])
-				class := binary.BigEndian.Uint16(tail[2:4])
-				ttl := binary.BigEndian.Uint32(tail[4:8])
-				rdl := int(binary.BigEndian.Uint16(tail[8:10]))
-				//rdata := d.payload[offset : offset+rdl]
-				tail = tail[10+rdl:]
-				sb.WriteString(fmt.Sprintf("  %s: type %d class %d ttl %d rdl %d\n", domain, typ, class, ttl, rdl))
+				rec, tail = d.parseRR(tail)
+				sb.WriteString(rec)
 			} else {
-				tail = tail[1:]
-				typ := binary.BigEndian.Uint16(tail[0:2])
-				ups := binary.BigEndian.Uint16(tail[2:4])
-				t1 := tail[4]
-				zres := binary.BigEndian.Uint16(tail[5:7])
-				rdl := int(binary.BigEndian.Uint16(tail[7:9]))
-				tail = tail[9+rdl:]
-				sb.WriteString(fmt.Sprintf("  Root: type %d UDP payload size %d t1 %d zres %d rdl %d\n", typ, ups, t1, zres, rdl))
+				rec, tail = d.parseRoot(tail)
+				sb.WriteString(rec)
 			}
-
 		}
 	}
 	return sb.String()
