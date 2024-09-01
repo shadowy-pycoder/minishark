@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
-	"unsafe"
 )
 
 const headerSizeDNS = 12
@@ -29,7 +28,6 @@ func (d *DNSMessage) String() string {
 - Answer RRs: %d
 - Authority RRs: %d
 - Additional RRs: %d
-- Payload: %d bytes
 %s
 `,
 		d.TransactionID,
@@ -39,7 +37,6 @@ func (d *DNSMessage) String() string {
 		d.AnswerRRs,
 		d.AuthorityRRs,
 		d.AdditionalRRs,
-		len(d.payload),
 		d.rrecords(),
 	)
 }
@@ -64,9 +61,9 @@ func (d *DNSMessage) NextLayer() (string, []byte) {
 }
 
 func (d *DNSMessage) flags() string {
-	// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml
 	var flags string
 	opcode := (d.Flags >> 11) & 15
+	// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
 	var opcodes string
 	switch opcode {
 	case 0:
@@ -88,7 +85,7 @@ func (d *DNSMessage) flags() string {
 	rd := (d.Flags >> 8) & 1
 	z := (d.Flags >> 6) & 1
 	na := (d.Flags >> 4) & 1
-	qr := (d.Flags >> 15) & 1
+	qr := d.Flags >> 15
 	var qrs string
 	switch qr {
 	case 0:
@@ -105,6 +102,7 @@ func (d *DNSMessage) flags() string {
 		ra := (d.Flags >> 7) & 1
 		aa := (d.Flags >> 5) & 1
 		rcode := d.Flags & 15
+		// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
 		var rcodes string
 		switch rcode {
 		case 0:
@@ -126,7 +124,27 @@ func (d *DNSMessage) flags() string {
 		case 8:
 			rcodes = "Server not authoritative for the zone"
 		case 9:
-			rcodes = "Name not in zone"
+			rcodes = "Server Not Authoritative for zone"
+		case 10:
+			rcodes = "Name not contained in zone"
+		case 11:
+			rcodes = "DSO-TYPE Not Implemented"
+		case 16:
+			rcodes = "Bad OPT Version/TSIG Signature Failure"
+		case 17:
+			rcodes = "Key not recognizede"
+		case 18:
+			rcodes = "Signature out of time window"
+		case 19:
+			rcodes = "Bad TKEY Mode"
+		case 20:
+			rcodes = "Duplicate key name"
+		case 21:
+			rcodes = "Algorithm not supported"
+		case 22:
+			rcodes = "Bad Truncation"
+		case 23:
+			rcodes = "Bad/missing Server Cookie"
 		default:
 			rcodes = "Unknown"
 		}
@@ -144,17 +162,36 @@ func (d *DNSMessage) flags() string {
 	return flags
 }
 
-func bytesToStr(myBytes []byte) string {
-	return unsafe.String(unsafe.SliceData(myBytes), len(myBytes))
+// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-2
+func (d *DNSMessage) className(cls uint16) string {
+	var cname string
+	switch cls {
+	case 0:
+		cname = "Reserved"
+	case 1:
+		cname = "IN"
+	case 3:
+		cname = "CH"
+	case 4:
+		cname = "HS"
+	default:
+		cname = "Unknown"
+	}
+	return cname
 }
 
+// extractDomain extracts the DNS domain name from the given byte slice.
+//
+// The domain name is parsed according to RFC 1035 section 4.1.
 func (d *DNSMessage) extractDomain(tail []byte) (string, []byte) {
+	// see https://brunoscheufler.com/blog/2024-05-12-building-a-dns-message-parser#domain-names
 	var domainName string
 	for {
 		blen := tail[0]
 		if blen>>6 == 0b11 {
+			// compressed message offset is 14 bits according to RFC 1035 section 4.1.4
 			offset := binary.BigEndian.Uint16(tail[0:2])&(1<<14-1) - headerSizeDNS
-			part, _ := d.extractDomain(d.payload[offset:])
+			part, _ := d.extractDomain(d.payload[offset:]) // TODO: iterative approach
 			domainName += part
 			tail = tail[2:]
 			break
@@ -171,24 +208,27 @@ func (d *DNSMessage) extractDomain(tail []byte) (string, []byte) {
 	return strings.TrimRight(domainName, "."), tail
 }
 
+// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4
 func (d *DNSMessage) parseRData(typ uint16, tail []byte, rdl int) (string, string, []byte) {
-	var rdata string
-	var typname string
+	var (
+		rdata    string
+		typename string
+	)
 	switch typ {
 	case 1:
-		typname = "A"
+		typename = "A"
 		addr, _ := netip.AddrFromSlice(tail[0:rdl])
 		rdata = fmt.Sprintf("Address: %s", addr)
 	case 2:
-		typname = "NS"
+		typename = "NS"
 		domain, _ := d.extractDomain(tail)
-		rdata = fmt.Sprintf("%s: %s", typname, domain)
+		rdata = fmt.Sprintf("%s: %s", typename, domain)
 	case 5:
-		typname = "CNAME"
+		typename = "CNAME"
 		domain, _ := d.extractDomain(tail)
-		rdata = fmt.Sprintf("%s: %s", typname, domain)
+		rdata = fmt.Sprintf("%s: %s", typename, domain)
 	case 6:
-		typname = "SOA"
+		typename = "SOA"
 		var (
 			primary string
 			mailbox string
@@ -207,40 +247,44 @@ func (d *DNSMessage) parseRData(typ uint16, tail []byte, rdl int) (string, strin
     - Refresh interval: %d
     - Retry interval: %d
     - Expire limit: %d
-    - Minimum TTL: %d
-	`, primary, mailbox, serial, refresh, retry, expire, min)
+    - Minimum TTL: %d`,
+			primary, mailbox, serial, refresh, retry, expire, min)
 	case 15:
-		typname = "MX"
+		typename = "MX"
 		preference := binary.BigEndian.Uint16(tail[0:2])
 		domain, _ := d.extractDomain(tail[2:rdl])
-		rdata = fmt.Sprintf("%s: preference %d %s", typname, preference, domain)
+		rdata = fmt.Sprintf("%s: preference %d %s", typename, preference, domain)
 	case 16:
-		typname = "TXT"
-		rdata = fmt.Sprintf("%s: %s", typname, tail[:rdl])
+		typename = "TXT"
+		rdata = fmt.Sprintf("%s: %s", typename, tail[:rdl])
 	case 28:
-		typname = "AAAA"
+		typename = "AAAA"
 		addr, _ := netip.AddrFromSlice(tail[0:rdl])
 		rdata = fmt.Sprintf("Address: %s", addr)
 	case 41:
-		typname = "OPT"
+		typename = "OPT"
+	case 65:
+		typename = "HTTPS" // TODO: add proper parsing
+		rdata = fmt.Sprintf("%s: %d bytes", typename, rdl)
 	default:
 		rdata = fmt.Sprintf("Unknown: %d bytes", rdl)
 	}
-	return typname, rdata, tail[rdl:]
+	return typename, rdata, tail[rdl:]
 }
 
 func (d *DNSMessage) parseQuery(tail []byte) (string, []byte) {
 	var domain string
 	domain, tail = d.extractDomain(tail)
 	typ := binary.BigEndian.Uint16(tail[0:2])
+	typename, _, _ := d.parseRData(typ, tail, 0)
 	class := binary.BigEndian.Uint16(tail[2:4])
+	cname := d.className(class)
 	tail = tail[4:]
-	// TODO: add type and class description https://en.wikipedia.org/wiki/List_of_DNS_record_types
 	return fmt.Sprintf(`  - %s: 
     - Name: %s
-    - Type: (%d)
-    - Class: %d
-`, domain, domain, typ, class), tail
+    - Type: %s (%d)
+    - Class: %s (%d)
+`, domain, domain, typename, typ, cname, class), tail
 }
 
 func (d *DNSMessage) parseRR(tail []byte) (string, []byte) {
@@ -248,6 +292,7 @@ func (d *DNSMessage) parseRR(tail []byte) (string, []byte) {
 	domain, tail = d.extractDomain(tail)
 	typ := binary.BigEndian.Uint16(tail[0:2])
 	class := binary.BigEndian.Uint16(tail[2:4])
+	cname := d.className(class)
 	ttl := binary.BigEndian.Uint32(tail[4:8])
 	rdl := int(binary.BigEndian.Uint16(tail[8:10]))
 	var (
@@ -258,11 +303,11 @@ func (d *DNSMessage) parseRR(tail []byte) (string, []byte) {
 	return fmt.Sprintf(`  - %s:     
     - Name: %s
     - Type: %s (%d)
-    - Class: %d
+    - Class: %s (%d)
     - TTL: %d
     - Data Length: %d
     - %s
-`, domain, domain, typename, typ, class, ttl, rdl, rdata), tail
+`, domain, domain, typename, typ, cname, class, ttl, rdl, rdata), tail
 }
 
 func (d *DNSMessage) parseRoot(tail []byte) (string, []byte) {

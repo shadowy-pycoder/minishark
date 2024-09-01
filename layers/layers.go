@@ -1,6 +1,9 @@
 package layers
 
-import "fmt"
+import (
+	"fmt"
+	"unsafe"
+)
 
 var LayerMap = map[string]Layer{
 	"ETH":    &EthernetFrame{},
@@ -44,4 +47,8 @@ func nextAppLayer(src, dst uint16) string {
 		layer = ""
 	}
 	return layer
+}
+
+func bytesToStr(myBytes []byte) string {
+	return unsafe.String(unsafe.SliceData(myBytes), len(myBytes))
 }
