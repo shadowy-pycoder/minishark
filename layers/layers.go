@@ -15,7 +15,7 @@ var LayerMap = map[string]Layer{
 	"ICMP":   &ICMPSegment{},
 	"ICMPv6": &ICMPv6Segment{},
 	"DNS":    &DNSMessage{},
-	"FTP":    &DNSMessage{},
+	"FTP":    &FTPMessage{},
 	"HTTP":   &HTTPMessage{},
 	"SNMP":   &SNMPMessage{},
 	"SSH":    &SSHMessage{},
@@ -49,6 +49,6 @@ func nextAppLayer(src, dst uint16) string {
 	return layer
 }
 
-func bytesToStr(myBytes []byte) string {
-	return unsafe.String(unsafe.SliceData(myBytes), len(myBytes))
+func bytesToStr(b []byte) string {
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }

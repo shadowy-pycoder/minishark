@@ -1,14 +1,19 @@
 package layers
 
-// https://mavlink.io/zh/services/ftp.html
-// port 21 port 20
-type FTPMessage struct{}
+import "fmt"
+
+type FTPMessage struct {
+	payload string
+}
 
 func (f *FTPMessage) String() string {
-	return ""
+	return fmt.Sprintf(`FTP Message:
+%s
+`, f.payload)
 }
 
 func (f *FTPMessage) Parse(data []byte) error {
+	f.payload = bytesToStr(data)
 	return nil
 }
 

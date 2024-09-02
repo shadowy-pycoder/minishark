@@ -81,7 +81,7 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	mw.printPacket(next, layerNum)
 	for {
 		name, data := next.NextLayer()
-		if name == "" {
+		if name == "" || len(data) == 0 {
 			return nil
 		}
 		next = layers.LayerMap[name]
