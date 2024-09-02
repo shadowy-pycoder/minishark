@@ -1,12 +1,17 @@
 package layers
 
+import "fmt"
+
 // port 443
 type TLSMessage struct{}
 
-func (t *TLSMessage) String() string {
-	return ""
+func (s *TLSMessage) String() string {
+	return fmt.Sprintf(`%s`, s.Summary())
 }
 
+func (s *TLSMessage) Summary() string {
+	return fmt.Sprint("TLS Message:")
+}
 func (t *TLSMessage) Parse(data []byte) error {
 	return nil
 }

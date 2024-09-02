@@ -14,11 +14,13 @@ const headerSizeARP = 28
 // associated with a given internet layer address, typically an IPv4 address.
 // Defined in RFC 826.
 type ARPPacket struct {
-	HardwareType uint16 // Network link protocol type.
-	ProtocolType uint16 // Internetwork protocol for which the ARP request is intended.
-	Hlen         uint8  // Length (in octets) of a hardware address.
-	Plen         uint8  // Length (in octets) of internetwork addresses.
-	Op           uint16 // Specifies the operation that the sender is performing.
+	HardwareType     uint16 // Network link protocol type.
+	ProtocolType     uint16 // Internetwork protocol for which the ARP request is intended.
+	ProtocolTypeDesc string // Internetwork protocol description.
+	Hlen             uint8  // Length (in octets) of a hardware address.
+	Plen             uint8  // Length (in octets) of internetwork addresses.
+	Op               uint16 // Specifies the operation that the sender is performing.
+	OpDesc           string // Operation description.
 	// Media address of the sender. In an ARP request this field is used to indicate
 	// the address of the host sending the request. In an ARP reply this field is used
 	// to indicate the address of the host that the request was looking for.
@@ -31,7 +33,7 @@ type ARPPacket struct {
 }
 
 func (ap *ARPPacket) String() string {
-	return fmt.Sprintf(`ARP Packet:
+	return fmt.Sprintf(`%s
 - Hardware Type: %d
 - Protocol Type: %s (%#04x)
 - HLen: %d
@@ -42,18 +44,32 @@ func (ap *ARPPacket) String() string {
 - Target MAC Address: %s
 - Target IP Address: %s
 `,
+		ap.Summary(),
 		ap.HardwareType,
-		ap.ptype(),
+		ap.ProtocolTypeDesc,
 		ap.ProtocolType,
 		ap.Hlen,
 		ap.Plen,
-		ap.op(),
+		ap.OpDesc,
 		ap.Op,
 		ap.SenderMAC,
 		ap.SenderIP,
 		ap.TargetMAC,
 		ap.TargetIP,
 	)
+}
+
+func (ap *ARPPacket) Summary() string {
+	var message string
+	switch ap.OpDesc {
+	case "request":
+		message = fmt.Sprintf("ARP Packet: (%s) Who has %s? Tell %s", ap.OpDesc, ap.TargetIP, ap.SenderIP)
+	case "reply":
+		message = fmt.Sprintf("ARP Packet: (%s) %s at %s", ap.OpDesc, ap.SenderIP, ap.SenderMAC)
+	default:
+		message = fmt.Sprintf("ARP Packet: (%s)", ap.OpDesc)
+	}
+	return message
 }
 
 // Parse parses the given ARP packet data into the ARPPacket struct.
@@ -63,9 +79,11 @@ func (ap *ARPPacket) Parse(data []byte) error {
 	}
 	ap.HardwareType = binary.BigEndian.Uint16(data[0:2])
 	ap.ProtocolType = binary.BigEndian.Uint16(data[2:4])
+	ap.ProtocolTypeDesc = ap.ptype()
 	ap.Hlen = data[4]
 	ap.Plen = data[5]
 	ap.Op = binary.BigEndian.Uint16(data[6:8])
+	ap.OpDesc = ap.op()
 	hoffset := 8 + ap.Hlen
 	ap.SenderMAC = net.HardwareAddr(data[8:hoffset])
 	poffset := hoffset + ap.Plen

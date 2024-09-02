@@ -8,14 +8,35 @@ import (
 
 const headerSizeIPv6 = 40
 
+type TrafficClass struct {
+	Raw      uint8
+	DSCP     uint8
+	DSCPDesc string
+	ECN      uint8
+}
+
+func newTrafficiClass(tc uint8) *TrafficClass {
+	dscpbin := tc >> 2
+	return &TrafficClass{
+		Raw:      tc,
+		DSCP:     dscpbin,
+		DSCPDesc: dscpdesc(dscpbin),
+		ECN:      tc & 3}
+}
+
+func (p *TrafficClass) String() string {
+	return fmt.Sprintf("%#02x DSCP: %s (%#06b) ECN: %#02b", p.Raw, p.DSCPDesc, p.DSCP, p.ECN)
+}
+
 // An IPv6 packet is the smallest message entity exchanged using Internet Protocol version 6 (IPv6).
 // IPv6 protocol defined in RFC 2460.
 type IPv6Packet struct {
-	Version       uint8  // 4 bits version field (for IPv6, this is always equal to 6).
-	TrafficClass  uint8  // 6 + 2 bits holds DS and ECN values.
-	FlowLabel     uint32 // 20 bits high-entropy identifier of a flow of packets between a source and destination.
-	PayloadLength uint16 // 16 bits the size of the payload in octets, including any extension headers.
-	NextHeader    uint8  // 8 bits specifies the type of the next header.
+	Version        uint8         // 4 bits version field (for IPv6, this is always equal to 6).
+	TrafficClass   *TrafficClass // 6 + 2 bits holds DS and ECN values.
+	FlowLabel      uint32        // 20 bits high-entropy identifier of a flow of packets between a source and destination.
+	PayloadLength  uint16        // 16 bits the size of the payload in octets, including any extension headers.
+	NextHeader     uint8         // 8 bits specifies the type of the next header.
+	NextHeaderDesc string        // next header description
 	// 8 bits replaces the time to live field in IPv4. This value is decremented by one at each forwarding node
 	// and the packet is discarded if it becomes 0. However, the destination node should process the packet normally
 	// even if received with a hop limit of 0.
@@ -26,7 +47,7 @@ type IPv6Packet struct {
 }
 
 func (p *IPv6Packet) String() string {
-	return fmt.Sprintf(`IPv6 Packet:
+	return fmt.Sprintf(`%s
 - Version: %d
 - Traffic Class: %s
 - Payload Length: %d
@@ -36,16 +57,21 @@ func (p *IPv6Packet) String() string {
 - DstIP: %s
 - Payload: %d bytes
 `,
+		p.Summary(),
 		p.Version,
-		p.trafficClass(),
+		p.TrafficClass,
 		p.PayloadLength,
-		p.nextHeader(),
+		p.NextHeaderDesc,
 		p.NextHeader,
 		p.HopLimit,
 		p.SrcIP,
 		p.DstIP,
 		len(p.payload),
 	)
+}
+
+func (p *IPv6Packet) Summary() string {
+	return fmt.Sprintf("IPv6 Packet: Src: %s Dst: %s", p.SrcIP, p.DstIP)
 }
 
 // Parse parses the given byte data into an IPv6 packet struct.
@@ -55,10 +81,11 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	}
 	versionTrafficFlow := binary.BigEndian.Uint32(data[0:4])
 	p.Version = uint8(versionTrafficFlow >> 28)
-	p.TrafficClass = uint8((versionTrafficFlow >> 20) & 0xFF)
+	p.TrafficClass = newTrafficiClass(uint8((versionTrafficFlow >> 20) & 0xFF))
 	p.FlowLabel = versionTrafficFlow & (1<<20 - 1)
 	p.PayloadLength = binary.BigEndian.Uint16(data[4:6])
 	p.NextHeader = data[6]
+	p.NextHeaderDesc = p.nextHeader()
 	p.HopLimit = data[7]
 	p.SrcIP, _ = netip.AddrFromSlice(data[8:24])
 	p.DstIP, _ = netip.AddrFromSlice(data[24:headerSizeIPv6])
@@ -118,10 +145,9 @@ func (p *IPv6Packet) nextHeader() string {
 	return header
 }
 
-func (p *IPv6Packet) trafficClass() string {
+func dscpdesc(dscpbin uint8) string {
 	// https://en.wikipedia.org/wiki/Differentiated_services
 	var dscp string
-	dscpbin := p.TrafficClass >> 2
 	switch dscpbin {
 	case 0:
 		dscp = "Standard (DF)"
@@ -150,5 +176,5 @@ func (p *IPv6Packet) trafficClass() string {
 	default:
 		dscp = "Unknown"
 	}
-	return fmt.Sprintf("%#02x DSCP: %s (%#06b) ECN: %#02b", p.TrafficClass, dscp, dscpbin, p.TrafficClass&3)
+	return dscp
 }

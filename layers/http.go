@@ -9,9 +9,11 @@ type HTTPMessage struct {
 }
 
 func (h *HTTPMessage) String() string {
-	return fmt.Sprintf(`HTTP Message:
-%s
-`, h.payload)
+	return fmt.Sprintf(`%s
+%s`, h.Summary(), h.payload)
+}
+func (h *HTTPMessage) Summary() string {
+	return fmt.Sprint("HTTP Message:")
 }
 
 func (h *HTTPMessage) Parse(data []byte) error {

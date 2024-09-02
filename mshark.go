@@ -43,21 +43,30 @@ type Writer struct {
 	w       io.Writer
 	packets uint64
 	stdout  bool
+	verbose bool
 }
 
 // NewWriter creates a new mshark Writer.
-func NewWriter(w io.Writer) *Writer {
+func NewWriter(w io.Writer, verbose bool) *Writer {
 	var stdout bool
 	if w == os.Stdout {
 		stdout = true
 	}
-	return &Writer{w: w, stdout: stdout}
+	return &Writer{
+		w:       w,
+		stdout:  stdout,
+		verbose: verbose}
 }
 
 // printPacket prints a layer packet to the writer. If the writer is an instance of os.Stdout,
 // the packet will be printed with color, based on the layerNum.
 func (mw *Writer) printPacket(layer layers.Layer, layerNum int) {
-	packet := layer.String()
+	var packet string
+	if mw.verbose {
+		packet = layer.String()
+	} else {
+		packet = layer.Summary()
+	}
 	if mw.stdout {
 		if color, ok := colorMap[layerNum]; ok {
 			packet = color + packet + "\033[0m"

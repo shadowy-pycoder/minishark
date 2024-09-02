@@ -16,7 +16,7 @@ func BenchmarkOpenLive(b *testing.B) {
 		Snaplen:     1600,
 		PacketCount: b.N,
 	}
-	pw := NewWriter(io.Discard)
+	pw := NewWriter(io.Discard, false)
 	if err := OpenLive(&conf, pw); err != nil {
 		b.Fatal(err)
 	}

@@ -17,19 +17,24 @@ type UDPSegment struct {
 }
 
 func (u *UDPSegment) String() string {
-	return fmt.Sprintf(`UDP Segment:
+	return fmt.Sprintf(`%s
 - SrcPort: %d
 - DstPort: %d
 - UDP Length: %d
 - Checksum: %#04x
 - Payload: %d bytes
 `,
+		u.Summary(),
 		u.SrcPort,
 		u.DstPort,
 		u.UDPLength,
 		u.Checksum,
 		len(u.payload),
 	)
+}
+
+func (u *UDPSegment) Summary() string {
+	return fmt.Sprintf("UDP Segment: Src Port: %d Dst Port: %d Len: %d", u.SrcPort, u.DstPort, len(u.payload))
 }
 
 // Parse parses the given byte data into a UDPSegment struct.

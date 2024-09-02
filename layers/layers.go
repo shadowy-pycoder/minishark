@@ -26,6 +26,7 @@ type Layer interface {
 	fmt.Stringer
 	Parse(data []byte) error
 	NextLayer() (name string, payload []byte)
+	Summary() string
 }
 
 func nextAppLayer(src, dst uint16) string {

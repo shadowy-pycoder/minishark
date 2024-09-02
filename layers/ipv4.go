@@ -8,18 +8,37 @@ import (
 
 const headerSizeIPv4 = 20
 
+type IPv4Flags struct {
+	Reserved uint8
+	MF       uint8
+	DF       uint8
+}
+
+func (i *IPv4Flags) String() string {
+	return fmt.Sprintf("Reserved %d DF %d MF %d", i.Reserved, i.MF, i.DF)
+}
+
+func newIPv4Flags(flags uint8) *IPv4Flags {
+	return &IPv4Flags{
+		Reserved: (flags >> 2) & 1,
+		DF:       (flags >> 1) & 1,
+		MF:       flags & 1}
+}
+
 // Internet Protocol version 4 is described in IETF publication RFC 791.
 type IPv4Packet struct {
 	Version        uint8      // 4 bits version (for IPv4, this is always equal to 4).
 	IHL            uint8      // 4 bits size of header (number of 32-bit words).
 	DSCP           uint8      // 6 bits specifies differentiated services.
+	DSCPDesc       string     // differentiated services description.
 	ECN            uint8      // 2 bits end-to-end notification of network congestion without dropping packets.
 	TotalLength    uint16     // 16 bits defines the entire packet size in bytes, including header and data.
 	Identification uint16     // 16 bits identifies the group of fragments of a single IP datagram.
-	Flags          uint8      // 3 bits used to control or identify fragments.
+	Flag           *IPv4Flags // 3 bits used to control or identify fragments.
 	FragmentOffset uint16     // 13 bits offset of a particular fragment.
 	TTL            uint8      // 8 bits limits a datagram's lifetime to prevent network failure.
 	Protocol       uint8      // 8 bits defines the protocol used in the data portion of the IP datagram.
+	ProtocolDesc   string     // Protocol description.
 	HeaderChecksum uint16     // 16 bits used for error checking of the header.
 	SrcIP          netip.Addr // IPv4 address of the sender of the packet.
 	DstIP          netip.Addr // IPv4 address of the receiver of the packet.
@@ -28,8 +47,7 @@ type IPv4Packet struct {
 }
 
 func (p *IPv4Packet) String() string {
-	proto, _ := p.NextLayer()
-	return fmt.Sprintf(`IPv4 Packet:
+	return fmt.Sprintf(`%s
 - Version: %d
 - IHL: %d
 - DSCP: %s (%#06b)
@@ -46,17 +64,18 @@ func (p *IPv4Packet) String() string {
 - Options: %v
 - Payload: %d bytes
 `,
+		p.Summary(),
 		p.Version,
 		p.IHL,
-		p.dscp(),
+		p.DSCPDesc,
 		p.DSCP,
 		p.ECN,
 		p.TotalLength,
 		p.Identification,
-		p.flags(),
+		p.Flag,
 		p.FragmentOffset,
 		p.TTL,
-		proto,
+		p.ProtocolDesc,
 		p.Protocol,
 		p.HeaderChecksum,
 		p.SrcIP,
@@ -64,6 +83,10 @@ func (p *IPv4Packet) String() string {
 		p.Options,
 		len(p.payload),
 	)
+}
+
+func (p *IPv4Packet) Summary() string {
+	return fmt.Sprintf("IPv4 Packet: Src: %s Dst: %s", p.SrcIP, p.DstIP)
 }
 
 // Parse parses the given byte data into an IPv4 packet struct.
@@ -76,11 +99,13 @@ func (p *IPv4Packet) Parse(data []byte) error {
 	p.IHL = versionIHL & 15
 	dscpECN := data[1]
 	p.DSCP = dscpECN >> 2
+	p.DSCPDesc = p.dscp()
 	p.ECN = dscpECN & 3
 	p.TotalLength = binary.BigEndian.Uint16(data[2:4])
 	p.Identification = binary.BigEndian.Uint16(data[4:6])
 	flagsOffset := binary.BigEndian.Uint16(data[6:8])
-	p.Flags = uint8(flagsOffset >> 13)
+	flags := uint8(flagsOffset >> 13)
+	p.Flag = newIPv4Flags(flags)
 	p.FragmentOffset = flagsOffset & (1<<13 - 1)
 	p.TTL = data[8]
 	p.Protocol = data[9]
@@ -94,6 +119,7 @@ func (p *IPv4Packet) Parse(data []byte) error {
 	} else {
 		p.payload = data[headerSizeIPv4:]
 	}
+	p.ProtocolDesc, _ = p.NextLayer()
 	return nil
 }
 
@@ -145,8 +171,4 @@ func (p *IPv4Packet) dscp() string {
 		dscp = "Unknown"
 	}
 	return dscp
-}
-
-func (p *IPv4Packet) flags() string {
-	return fmt.Sprintf("Reserved %d DF %d MF %d", (p.Flags>>2)&1, (p.Flags>>1)&1, p.Flags&1)
 }

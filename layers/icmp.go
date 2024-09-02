@@ -10,8 +10,10 @@ const headerSizeICMP = 4
 
 // ICMP is part of the Internet protocol suite as defined in RFC 792.
 type ICMPSegment struct {
-	Type uint8 // ICMP type.
-	Code uint8 // ICMP subtype.
+	Type     uint8  // ICMP type.
+	TypeDesc string // ICMP type description.
+	Code     uint8  // ICMP subtype.
+	CodeDesc string // ICMP subtype description.
 	// Internet checksum (RFC 1071) for error checking, calculated from the ICMP header
 	// and data with value 0 substituted for this field.
 	Checksum uint16
@@ -19,20 +21,24 @@ type ICMPSegment struct {
 }
 
 func (i *ICMPSegment) String() string {
-	mtype, code := i.typecode()
-	return fmt.Sprintf(`ICMP Segment:
+	return fmt.Sprintf(`%s
 - Type: %d (%s)
 - Code: %d (%s)
 - Checksum: %#04x
 %s
 `,
+		i.Summary(),
 		i.Type,
-		mtype,
+		i.TypeDesc,
 		i.Code,
-		code,
+		i.CodeDesc,
 		i.Checksum,
 		i.data(),
 	)
+}
+
+func (i *ICMPSegment) Summary() string {
+	return fmt.Sprintf("ICMP Segment: %s (%s)", i.TypeDesc, i.CodeDesc)
 }
 
 // Parse parses the given byte data into an ICMP segment struct.
@@ -56,6 +62,7 @@ func (i *ICMPSegment) Parse(data []byte) error {
 	if len(i.Data) < pLen {
 		return fmt.Errorf("minimum payload length for ICMP with type %d is %d bytes", i.Type, pLen)
 	}
+	i.TypeDesc, i.CodeDesc = i.typecode()
 	return nil
 }
 func (i *ICMPSegment) NextLayer() (string, []byte) {

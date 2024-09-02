@@ -7,9 +7,12 @@ type FTPMessage struct {
 }
 
 func (f *FTPMessage) String() string {
-	return fmt.Sprintf(`FTP Message:
-%s
-`, f.payload)
+	return fmt.Sprintf(`%s
+%s`, f.Summary(), f.payload)
+}
+
+func (f *FTPMessage) Summary() string {
+	return fmt.Sprint("FTP Message:")
 }
 
 func (f *FTPMessage) Parse(data []byte) error {

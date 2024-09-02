@@ -11,26 +11,31 @@ const headerSizeEthernet = 14
 
 // An Ethernet frame is a data link layer protocol data unit.
 type EthernetFrame struct {
-	DstMAC    net.HardwareAddr // MAC address of the destination device.
-	SrcMAC    net.HardwareAddr // MAC address of the source device.
-	EtherType uint16           // The protocol of the upper layer.
-	payload   []byte
+	DstMAC        net.HardwareAddr // MAC address of the destination device.
+	SrcMAC        net.HardwareAddr // MAC address of the source device.
+	EtherType     uint16           // The protocol of the upper layer.
+	EtherTypeDesc string           // Protocol description
+	payload       []byte
 }
 
 func (ef *EthernetFrame) String() string {
-	ethType, _ := ef.NextLayer()
-	return fmt.Sprintf(`Ethernet Frame:
+	return fmt.Sprintf(`%s
 - DstMAC: %s
 - SrcMAC: %s
 - EtherType: %s (%#04x)
 - Payload: %d bytes 
 %s`,
+		ef.Summary(),
 		ef.DstMAC,
 		ef.SrcMAC,
-		ethType,
+		ef.EtherTypeDesc,
 		ef.EtherType,
 		len(ef.payload),
 		hex.Dump(ef.payload))
+}
+
+func (ef *EthernetFrame) Summary() string {
+	return fmt.Sprintf("Ethernet Frame: Src: %s Dst: %s", ef.SrcMAC, ef.DstMAC)
 }
 
 // Parse parses the given byte data into an Ethernet frame.
@@ -42,6 +47,7 @@ func (ef *EthernetFrame) Parse(data []byte) error {
 	ef.SrcMAC = net.HardwareAddr(data[6:12])
 	ef.EtherType = binary.BigEndian.Uint16(data[12:14])
 	ef.payload = data[headerSizeEthernet:]
+	ef.EtherTypeDesc, _ = ef.NextLayer()
 	return nil
 }
 

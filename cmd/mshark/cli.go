@@ -98,13 +98,18 @@ func root(args []string) error {
 	})
 	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
-	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp"`)
+	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp".`)
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
 		if err := displayInterfaces(); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", app, err)
 			os.Exit(2)
 		}
 		os.Exit(0)
+		return nil
+	})
+	var verbose bool
+	flags.BoolFunc("v", "Display full packet info when capturing to stdout or txt.", func(flagValue string) error {
+		verbose = true
 		return nil
 	})
 	exts := ExtFlag([]string{})
@@ -138,7 +143,7 @@ func root(args []string) error {
 		for _, ext := range exts {
 			switch ext {
 			case "stdout":
-				w := ms.NewWriter(os.Stdout)
+				w := ms.NewWriter(os.Stdout, verbose)
 				if err := w.WriteHeader(&conf); err != nil {
 					return err
 				}
@@ -149,7 +154,7 @@ func root(args []string) error {
 					return err
 				}
 				defer f.Close()
-				w := ms.NewWriter(f)
+				w := ms.NewWriter(f, verbose)
 				if err := w.WriteHeader(&conf); err != nil {
 					return err
 				}
@@ -182,7 +187,7 @@ func root(args []string) error {
 			}
 		}
 	} else {
-		w := ms.NewWriter(os.Stdout)
+		w := ms.NewWriter(os.Stdout, verbose)
 		if err := w.WriteHeader(&conf); err != nil {
 			return err
 		}

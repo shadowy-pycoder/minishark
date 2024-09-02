@@ -20,16 +20,15 @@ type DNSMessage struct {
 }
 
 func (d *DNSMessage) String() string {
-	return fmt.Sprintf(`DNS Message:
-- Transaction ID: %#04x
+	return fmt.Sprintf(`%s- Transaction ID: %#04x
 - Flags: %#04x
 %s
 - Questions: %d
 - Answer RRs: %d
 - Authority RRs: %d
 - Additional RRs: %d
-%s
-`,
+%s`,
+		d.Summary(),
 		d.TransactionID,
 		d.Flags,
 		d.flags(),
@@ -39,6 +38,10 @@ func (d *DNSMessage) String() string {
 		d.AdditionalRRs,
 		d.rrecords(),
 	)
+}
+
+func (d *DNSMessage) Summary() string {
+	return fmt.Sprint("DNS Message:")
 }
 
 // Parse parses the given byte data into a DNSMessage struct.
