@@ -9,18 +9,96 @@ import (
 
 const headerSizeDNS = 12
 
+type DNSFlags struct {
+	Raw        uint16
+	QR         uint8  // Indicates if the message is a query (0) or a reply (1).
+	QRDesc     string // Query (0) or Reply (1)
+	OPCode     uint8  // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
+	OPCodeDesc string
+	AA         uint8 // Authoritative Answer, in a response, indicates if the DNS server is authoritative for the queried hostname.
+	TC         uint8 // TrunCation, indicates that this message was truncated due to excessive length.
+	RD         uint8 // Recursion Desired, indicates if the client means a recursive query.
+	RA         uint8 // Recursion Available, in a response, indicates if the replying DNS server supports recursion.
+	Z          uint8 // Zero, reserved for future use.
+	AU         uint8 // Indicates if answer/authority portion was authenticated by the server.
+	NA         uint8 // Indicates if non-authenticated data is accepatable.
+	RCode      uint8 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
+	RCodeDesc  string
+}
+
+func (df *DNSFlags) String() string {
+	var flags string
+	switch df.QR {
+	case 0:
+		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
+  - Opcode: %s (%d)
+  - Truncated: %d
+  - Recursion desired: %d
+  - Reserved: %d
+  - Non-authenticated data: %d`, df.QRDesc, df.QR, df.OPCodeDesc, df.OPCode, df.TC, df.RD, df.Z, df.NA)
+	case 1:
+		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
+  - Opcode: %s (%d)
+  - Authoritative: %d
+  - Truncated: %d
+  - Recursion desired: %d
+  - Recursion available: %d
+  - Reserved: %d
+  - Answer authenticated: %d
+  - Non-authenticated data: %d
+  - Reply code: %s (%d)`,
+			df.QRDesc,
+			df.QR,
+			df.OPCodeDesc,
+			df.OPCode,
+			df.AA,
+			df.TC,
+			df.RD,
+			df.RA,
+			df.Z,
+			df.AU,
+			df.NA,
+			df.RCodeDesc,
+			df.RCode)
+	}
+	return flags
+}
+
+func newDNSFlags(flags uint16) *DNSFlags {
+	qr := uint8(flags >> 15)
+	opcode := uint8((flags >> 11) & 15)
+	rcode := uint8(flags & 15)
+	return &DNSFlags{
+		Raw:        flags,
+		QR:         qr,
+		QRDesc:     qrdesc(qr),
+		OPCode:     opcode,
+		OPCodeDesc: opcdesc(opcode),
+		AA:         uint8((flags >> 10) & 1),
+		TC:         uint8((flags >> 9) & 1),
+		RD:         uint8((flags >> 8) & 1),
+		RA:         uint8((flags >> 7) & 1),
+		Z:          uint8((flags >> 6) & 1),
+		AU:         uint8((flags >> 5) & 1),
+		NA:         uint8((flags >> 4) & 1),
+		RCode:      rcode,
+		RCodeDesc:  rcdesc(rcode),
+	}
+}
+
 type DNSMessage struct {
-	TransactionID uint16 // Used for matching response to queries.
-	Flags         uint16 // Flags specify the requested operation and a response code.
-	Questions     uint16 // Count of entries in the queries section.
-	AnswerRRs     uint16 // Count of entries in the answers section.
-	AuthorityRRs  uint16 // Count of entries in the authority section.
-	AdditionalRRs uint16 // Count of entries in the additional section.
+	TransactionID uint16    // Used for matching response to queries.
+	Flags         *DNSFlags // Flags specify the requested operation and a response code.
+	Questions     uint16    // Count of entries in the queries section.
+	AnswerRRs     uint16    // Count of entries in the answers section.
+	AuthorityRRs  uint16    // Count of entries in the authority section.
+	AdditionalRRs uint16    // Count of entries in the additional section.
 	payload       []byte
 }
 
 func (d *DNSMessage) String() string {
-	return fmt.Sprintf(`%s- Transaction ID: %#04x
+	return fmt.Sprintf(`%s
+- Transaction ID: %#04x
 - Flags: %#04x
 %s
 - Questions: %d
@@ -30,8 +108,8 @@ func (d *DNSMessage) String() string {
 %s`,
 		d.Summary(),
 		d.TransactionID,
+		d.Flags.Raw,
 		d.Flags,
-		d.flags(),
 		d.Questions,
 		d.AnswerRRs,
 		d.AuthorityRRs,
@@ -41,7 +119,7 @@ func (d *DNSMessage) String() string {
 }
 
 func (d *DNSMessage) Summary() string {
-	return fmt.Sprint("DNS Message:")
+	return fmt.Sprintf("DNS Message: %s %s %#04x", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID)
 }
 
 // Parse parses the given byte data into a DNSMessage struct.
@@ -50,7 +128,7 @@ func (d *DNSMessage) Parse(data []byte) error {
 		return fmt.Errorf("minimum header size for DNS is %d bytes, got %d bytes", headerSizeDNS, len(data))
 	}
 	d.TransactionID = binary.BigEndian.Uint16(data[0:2])
-	d.Flags = binary.BigEndian.Uint16(data[2:4])
+	d.Flags = newDNSFlags(binary.BigEndian.Uint16(data[2:4]))
 	d.Questions = binary.BigEndian.Uint16(data[4:6])
 	d.AnswerRRs = binary.BigEndian.Uint16(data[6:8])
 	d.AuthorityRRs = binary.BigEndian.Uint16(data[8:10])
@@ -63,106 +141,87 @@ func (d *DNSMessage) NextLayer() (string, []byte) {
 	return "", nil
 }
 
-func (d *DNSMessage) flags() string {
-	var flags string
-	opcode := (d.Flags >> 11) & 15
-	// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
-	var opcodes string
-	switch opcode {
-	case 0:
-		opcodes = "Standard query"
-	case 1:
-		opcodes = "Inverse query"
-	case 2:
-		opcodes = "Server status request"
-	case 4:
-		opcodes = "Notify"
-	case 5:
-		opcodes = "Update"
-	case 6:
-		opcodes = "Stateful operation"
-	default:
-		opcodes = "Unknown"
-	}
-	tc := (d.Flags >> 9) & 1
-	rd := (d.Flags >> 8) & 1
-	z := (d.Flags >> 6) & 1
-	na := (d.Flags >> 4) & 1
-	qr := d.Flags >> 15
-	var qrs string
+func qrdesc(qr uint8) string {
+	var qrdesc string
 	switch qr {
 	case 0:
-		qrs = "query"
-		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
-  - Opcode: %s (%d)
-  - Truncated: %d
-  - Recursion desired: %d
-  - Reserved: %d
-  - Non-authenticated data: %d`, qrs, qr, opcodes, opcode, tc, rd, z, na)
+		qrdesc = "query"
 	case 1:
-		qrs = "reply"
-		a := (d.Flags >> 10) & 1
-		ra := (d.Flags >> 7) & 1
-		aa := (d.Flags >> 5) & 1
-		rcode := d.Flags & 15
-		// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
-		var rcodes string
-		switch rcode {
-		case 0:
-			rcodes = "No error"
-		case 1:
-			rcodes = "Format error"
-		case 2:
-			rcodes = "Server failed to complete the DNS request"
-		case 3:
-			rcodes = "Domain name does not exist"
-		case 4:
-			rcodes = "Function not implemented"
-		case 5:
-			rcodes = "The server refused to answer for the query"
-		case 6:
-			rcodes = "Name that should not exist, does exist"
-		case 7:
-			rcodes = "RRset that should not exist, does exist"
-		case 8:
-			rcodes = "Server not authoritative for the zone"
-		case 9:
-			rcodes = "Server Not Authoritative for zone"
-		case 10:
-			rcodes = "Name not contained in zone"
-		case 11:
-			rcodes = "DSO-TYPE Not Implemented"
-		case 16:
-			rcodes = "Bad OPT Version/TSIG Signature Failure"
-		case 17:
-			rcodes = "Key not recognizede"
-		case 18:
-			rcodes = "Signature out of time window"
-		case 19:
-			rcodes = "Bad TKEY Mode"
-		case 20:
-			rcodes = "Duplicate key name"
-		case 21:
-			rcodes = "Algorithm not supported"
-		case 22:
-			rcodes = "Bad Truncation"
-		case 23:
-			rcodes = "Bad/missing Server Cookie"
-		default:
-			rcodes = "Unknown"
-		}
-		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
-  - Opcode: %s (%d)
-  - Authoritative: %d
-  - Truncated: %d
-  - Recursion desired: %d
-  - Recursion available: %d
-  - Reserved: %d
-  - Answer authenticated: %d
-  - Non-authenticated data: %d
-  - Reply code: %s (%d)`, qrs, qr, opcodes, opcode, a, tc, rd, ra, z, aa, na, rcodes, rcode)
+		qrdesc = "reply"
 	}
-	return flags
+	return qrdesc
+}
+
+// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
+func opcdesc(opcode uint8) string {
+	var opcdesc string
+	switch opcode {
+	case 0:
+		opcdesc = "Standard query"
+	case 1:
+		opcdesc = "Inverse query"
+	case 2:
+		opcdesc = "Server status request"
+	case 4:
+		opcdesc = "Notify"
+	case 5:
+		opcdesc = "Update"
+	case 6:
+		opcdesc = "Stateful operation"
+	default:
+		opcdesc = "Unknown"
+	}
+	return opcdesc
+}
+
+// https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
+func rcdesc(rcode uint8) string {
+	var rcdesc string
+	switch rcode {
+	case 0:
+		rcdesc = "No error"
+	case 1:
+		rcdesc = "Format error"
+	case 2:
+		rcdesc = "Server failed to complete the DNS request"
+	case 3:
+		rcdesc = "Domain name does not exist"
+	case 4:
+		rcdesc = "Function not implemented"
+	case 5:
+		rcdesc = "The server refused to answer for the query"
+	case 6:
+		rcdesc = "Name that should not exist, does exist"
+	case 7:
+		rcdesc = "RRset that should not exist, does exist"
+	case 8:
+		rcdesc = "Server not authoritative for the zone"
+	case 9:
+		rcdesc = "Server Not Authoritative for zone"
+	case 10:
+		rcdesc = "Name not contained in zone"
+	case 11:
+		rcdesc = "DSO-TYPE Not Implemented"
+	case 16:
+		rcdesc = "Bad OPT Version/TSIG Signature Failure"
+	case 17:
+		rcdesc = "Key not recognizede"
+	case 18:
+		rcdesc = "Signature out of time window"
+	case 19:
+		rcdesc = "Bad TKEY Mode"
+	case 20:
+		rcdesc = "Duplicate key name"
+	case 21:
+		rcdesc = "Algorithm not supported"
+	case 22:
+		rcdesc = "Bad Truncation"
+	case 23:
+		rcdesc = "Bad/missing Server Cookie"
+	default:
+		rcdesc = "Unknown"
+	}
+	return rcdesc
 }
 
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-2

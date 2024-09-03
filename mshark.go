@@ -48,13 +48,9 @@ type Writer struct {
 
 // NewWriter creates a new mshark Writer.
 func NewWriter(w io.Writer, verbose bool) *Writer {
-	var stdout bool
-	if w == os.Stdout {
-		stdout = true
-	}
 	return &Writer{
 		w:       w,
-		stdout:  stdout,
+		stdout:  w == os.Stdout,
 		verbose: verbose}
 }
 
@@ -115,6 +111,7 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 //   - Timeout: 5s
 //   - Number of Packets: 0
 //   - BPF Filter: "ip proto tcp"
+//   - Verbose: true
 func (mw *Writer) WriteHeader(c *Config) error {
 	_, err := fmt.Fprintf(mw.w, `- Interface: %s
 - Snapshot Length: %d
@@ -122,6 +119,7 @@ func (mw *Writer) WriteHeader(c *Config) error {
 - Timeout: %s
 - Number of Packets: %d
 - BPF Filter: %q
+- Verbose: %v
 
 `,
 		c.Device.Name,
@@ -130,6 +128,7 @@ func (mw *Writer) WriteHeader(c *Config) error {
 		c.Timeout,
 		c.PacketCount,
 		c.Expr,
+		mw.verbose,
 	)
 	return err
 }

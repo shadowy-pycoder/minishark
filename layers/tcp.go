@@ -20,7 +20,7 @@ type TCPFlags struct {
 }
 
 func (t *TCPFlags) String() string {
-	return fmt.Sprintf("CWR %d ECE %d URG %d ACK %d PSH %d RST %d SYN %d FIN %d (%#08b)",
+	return fmt.Sprintf("CWR %d ECE %d URG %d ACK %d PSH %d RST %d SYN %d FIN %d",
 		t.CWR,
 		t.ECE,
 		t.URG,
@@ -28,8 +28,7 @@ func (t *TCPFlags) String() string {
 		t.PSH,
 		t.RST,
 		t.SYN,
-		t.FIN,
-		t.Raw)
+		t.FIN)
 }
 
 func newTCPFlags(flags uint8) *TCPFlags {
@@ -58,7 +57,7 @@ type TCPSegment struct {
 	AckNumber  uint32
 	DataOffset uint8     // 4 bits specifies the size of the TCP header in 32-bit words.
 	Reserved   uint8     // 4 bits reserved for future use and should be set to zero.
-	Flag       *TCPFlags // Contains 8 1-bit flags (control bits)
+	Flags      *TCPFlags // Contains 8 1-bit flags (control bits)
 	// The size of the receive window, which specifies the number of window size units[b] that the sender of
 	// this segment is currently willing to receive.
 	WindowSize uint16
@@ -93,7 +92,7 @@ func (t *TCPSegment) String() string {
 		t.AckNumber,
 		t.DataOffset,
 		t.Reserved,
-		t.Flag,
+		t.Flags,
 		t.WindowSize,
 		t.Checksum,
 		t.UrgentPointer,
@@ -104,7 +103,7 @@ func (t *TCPSegment) String() string {
 }
 
 func (t *TCPSegment) Summary() string {
-	return fmt.Sprintf("TCP Segment: Src Port: %d Dst Port: %d Len: %d", t.SrcPort, t.DstPort, len(t.payload))
+	return fmt.Sprintf("TCP Segment: Src Port: %d -> Dst Port: %d %s Len: %d", t.SrcPort, t.DstPort, t.Flags, len(t.payload))
 }
 
 // Parse parses the given byte data into a TCPSegment struct.
@@ -119,7 +118,7 @@ func (t *TCPSegment) Parse(data []byte) error {
 	offsetReservedFlags := binary.BigEndian.Uint16(data[12:14])
 	t.DataOffset = uint8(offsetReservedFlags >> 12)
 	t.Reserved = uint8((offsetReservedFlags >> 8) & 15)
-	t.Flag = newTCPFlags(uint8(offsetReservedFlags & (1<<8 - 1)))
+	t.Flags = newTCPFlags(uint8(offsetReservedFlags & (1<<8 - 1)))
 	t.WindowSize = binary.BigEndian.Uint16(data[14:16])
 	t.Checksum = binary.BigEndian.Uint16(data[16:18])
 	t.UrgentPointer = binary.BigEndian.Uint16(data[18:headerSizeTCP])

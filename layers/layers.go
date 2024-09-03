@@ -22,6 +22,17 @@ var LayerMap = map[string]Layer{
 	"TLS":    &TLSMessage{},
 }
 
+var (
+	bspace   = []byte(" ")
+	dash     = []byte("- ")
+	lfd      = []byte("\n- ")
+	lf       = []byte("\n")
+	crlf     = []byte("\r\n")
+	dcrlf    = []byte("\r\n\r\n")
+	proto    = []byte("HTTP/1.1")
+	ellipsis = []byte("...")
+)
+
 type Layer interface {
 	fmt.Stringer
 	Parse(data []byte) error
@@ -52,4 +63,16 @@ func nextAppLayer(src, dst uint16) string {
 
 func bytesToStr(b []byte) string {
 	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
+func joinBytes(bs ...[]byte) []byte {
+	n := 0
+	for _, v := range bs {
+		n += len(v)
+	}
+	b, i := make([]byte, n), 0
+	for _, v := range bs {
+		i += copy(b[i:], v)
+	}
+	return b
 }

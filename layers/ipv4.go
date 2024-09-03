@@ -34,7 +34,7 @@ type IPv4Packet struct {
 	ECN            uint8      // 2 bits end-to-end notification of network congestion without dropping packets.
 	TotalLength    uint16     // 16 bits defines the entire packet size in bytes, including header and data.
 	Identification uint16     // 16 bits identifies the group of fragments of a single IP datagram.
-	Flag           *IPv4Flags // 3 bits used to control or identify fragments.
+	Flags          *IPv4Flags // 3 bits used to control or identify fragments.
 	FragmentOffset uint16     // 13 bits offset of a particular fragment.
 	TTL            uint8      // 8 bits limits a datagram's lifetime to prevent network failure.
 	Protocol       uint8      // 8 bits defines the protocol used in the data portion of the IP datagram.
@@ -72,7 +72,7 @@ func (p *IPv4Packet) String() string {
 		p.ECN,
 		p.TotalLength,
 		p.Identification,
-		p.Flag,
+		p.Flags,
 		p.FragmentOffset,
 		p.TTL,
 		p.ProtocolDesc,
@@ -86,7 +86,7 @@ func (p *IPv4Packet) String() string {
 }
 
 func (p *IPv4Packet) Summary() string {
-	return fmt.Sprintf("IPv4 Packet: Src: %s Dst: %s", p.SrcIP, p.DstIP)
+	return fmt.Sprintf("IPv4 Packet: Src IP: %s -> Dst IP: %s", p.SrcIP, p.DstIP)
 }
 
 // Parse parses the given byte data into an IPv4 packet struct.
@@ -105,7 +105,7 @@ func (p *IPv4Packet) Parse(data []byte) error {
 	p.Identification = binary.BigEndian.Uint16(data[4:6])
 	flagsOffset := binary.BigEndian.Uint16(data[6:8])
 	flags := uint8(flagsOffset >> 13)
-	p.Flag = newIPv4Flags(flags)
+	p.Flags = newIPv4Flags(flags)
 	p.FragmentOffset = flagsOffset & (1<<13 - 1)
 	p.TTL = data[8]
 	p.Protocol = data[9]
