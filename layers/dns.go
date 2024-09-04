@@ -86,61 +86,6 @@ func newDNSFlags(flags uint16) *DNSFlags {
 	}
 }
 
-type DNSMessage struct {
-	TransactionID uint16    // Used for matching response to queries.
-	Flags         *DNSFlags // Flags specify the requested operation and a response code.
-	Questions     uint16    // Count of entries in the queries section.
-	AnswerRRs     uint16    // Count of entries in the answers section.
-	AuthorityRRs  uint16    // Count of entries in the authority section.
-	AdditionalRRs uint16    // Count of entries in the additional section.
-	payload       []byte
-}
-
-func (d *DNSMessage) String() string {
-	return fmt.Sprintf(`%s
-- Transaction ID: %#04x
-- Flags: %#04x
-%s
-- Questions: %d
-- Answer RRs: %d
-- Authority RRs: %d
-- Additional RRs: %d
-%s`,
-		d.Summary(),
-		d.TransactionID,
-		d.Flags.Raw,
-		d.Flags,
-		d.Questions,
-		d.AnswerRRs,
-		d.AuthorityRRs,
-		d.AdditionalRRs,
-		d.rrecords(),
-	)
-}
-
-func (d *DNSMessage) Summary() string {
-	return fmt.Sprintf("DNS Message: %s %s %#04x", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID)
-}
-
-// Parse parses the given byte data into a DNSMessage struct.
-func (d *DNSMessage) Parse(data []byte) error {
-	if len(data) < headerSizeDNS {
-		return fmt.Errorf("minimum header size for DNS is %d bytes, got %d bytes", headerSizeDNS, len(data))
-	}
-	d.TransactionID = binary.BigEndian.Uint16(data[0:2])
-	d.Flags = newDNSFlags(binary.BigEndian.Uint16(data[2:4]))
-	d.Questions = binary.BigEndian.Uint16(data[4:6])
-	d.AnswerRRs = binary.BigEndian.Uint16(data[6:8])
-	d.AuthorityRRs = binary.BigEndian.Uint16(data[8:10])
-	d.AdditionalRRs = binary.BigEndian.Uint16(data[10:headerSizeDNS])
-	d.payload = data[headerSizeDNS:]
-	return nil
-}
-
-func (d *DNSMessage) NextLayer() (string, []byte) {
-	return "", nil
-}
-
 func qrdesc(qr uint8) string {
 	var qrdesc string
 	switch qr {
@@ -224,8 +169,153 @@ func rcdesc(rcode uint8) string {
 	return rcdesc
 }
 
+type DNSMessage struct {
+	TransactionID uint16    // Used for matching response to queries.
+	Flags         *DNSFlags // Flags specify the requested operation and a response code.
+	QDCount       uint16    // Count of entries in the queries section.
+	ANCount       uint16    //  Count of entries in the answers section.
+	NSCount       uint16    // Count of entries in the authority section.
+	ARCount       uint16    // Count of entries in the additional section.
+	Questions     []*QueryEntry
+	AnswerRRs     []*ResourceRecord
+	AuthorityRRs  []*ResourceRecord
+	AdditionalRRs []*ResourceRecord
+}
+
+func (d *DNSMessage) String() string {
+	return fmt.Sprintf(`%s
+- Transaction ID: %#04x
+- Flags: %#04x
+%s
+- Questions: %d
+- Answer RRs: %d
+- Authority RRs: %d
+- Additional RRs: %d
+%s`,
+		d.Summary(),
+		d.TransactionID,
+		d.Flags.Raw,
+		d.Flags,
+		d.QDCount,
+		d.ANCount,
+		d.NSCount,
+		d.ARCount,
+		d.rrecords(),
+	)
+}
+
+func (d *DNSMessage) Summary() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("DNS Message: %s %s %#04x ", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID))
+	for _, rec := range d.Questions {
+		if sb.Len() > 100 {
+			goto result
+		}
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+	}
+	for _, rec := range d.AnswerRRs {
+		if sb.Len() > 100 {
+			goto result
+		}
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+	}
+	for _, rec := range d.AuthorityRRs {
+		if sb.Len() > 100 {
+			goto result
+		}
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+	}
+	for _, rec := range d.AdditionalRRs {
+		if sb.Len() > 100 {
+			goto result
+		}
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+	}
+	return sb.String()
+result:
+	return sb.String()[:100] + string(ellipsis)
+}
+
+// Parse parses the given byte data into a DNSMessage struct.
+func (d *DNSMessage) Parse(data []byte) error {
+	if len(data) < headerSizeDNS {
+		return fmt.Errorf("minimum header size for DNS is %d bytes, got %d bytes", headerSizeDNS, len(data))
+	}
+	d.TransactionID = binary.BigEndian.Uint16(data[0:2])
+	d.Flags = newDNSFlags(binary.BigEndian.Uint16(data[2:4]))
+	d.QDCount = binary.BigEndian.Uint16(data[4:6])
+	d.ANCount = binary.BigEndian.Uint16(data[6:8])
+	d.NSCount = binary.BigEndian.Uint16(data[8:10])
+	d.ARCount = binary.BigEndian.Uint16(data[10:headerSizeDNS])
+	var tail []byte
+	payload := data[headerSizeDNS:]
+	d.Questions = nil
+	d.AnswerRRs = nil
+	d.AuthorityRRs = nil
+	d.AdditionalRRs = nil
+	if d.QDCount > 0 {
+		d.Questions, tail = parseQueries(payload, payload, d.QDCount)
+	}
+	if d.ANCount > 0 {
+		d.AnswerRRs, tail = parseResourceRecords(payload, tail, d.ANCount)
+	}
+	if d.NSCount > 0 {
+		d.AuthorityRRs, tail = parseResourceRecords(payload, tail, d.NSCount)
+	}
+	if d.ARCount > 0 {
+		d.AdditionalRRs, _ = parseResourceRecords(payload, tail, d.ARCount)
+	}
+	return nil
+}
+
+func (d *DNSMessage) NextLayer() (string, []byte) {
+	return "", nil
+}
+
+func (d *DNSMessage) rrecords() string {
+	var sb strings.Builder
+	if d.QDCount > 0 {
+		sb.WriteString("- Queries:\n")
+		for _, rec := range d.Questions {
+			sb.WriteString(rec.String())
+		}
+	}
+	if d.ANCount > 0 {
+		sb.WriteString("- Answers:\n")
+		for _, rec := range d.AnswerRRs {
+			sb.WriteString(rec.String())
+		}
+	}
+	if d.NSCount > 0 {
+		sb.WriteString("- Authoritative nameservers:\n")
+		for _, rec := range d.AuthorityRRs {
+			sb.WriteString(rec.String())
+		}
+	}
+	if d.ARCount > 0 {
+		sb.WriteString("- Additional records:\n")
+		for _, rec := range d.AdditionalRRs {
+			sb.WriteString(rec.String())
+		}
+	}
+	return sb.String()
+}
+
+type RecordClass struct {
+	Name string
+	Val  uint16
+}
+
+func (c *RecordClass) String() string {
+	return fmt.Sprintf("%s (%d)", c.Name, c.Val)
+}
+
+func newRecordClass(cls uint16) *RecordClass {
+	return &RecordClass{Name: className(cls), Val: cls}
+}
+
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-2
-func (d *DNSMessage) className(cls uint16) string {
+func className(cls uint16) string {
 	var cname string
 	switch cls {
 	case 0:
@@ -242,10 +332,219 @@ func (d *DNSMessage) className(cls uint16) string {
 	return cname
 }
 
-// extractDomain extracts the DNS domain name from the given byte slice.
+type RecordType struct {
+	Name string
+	Val  uint16
+}
+
+func (rt *RecordType) String() string {
+	return fmt.Sprintf("%s (%d)", rt.Name, rt.Val) // TODO: new line
+}
+
+func newRecordType(typ uint16) *RecordType {
+	return &RecordType{Name: typeName(typ), Val: typ}
+}
+
+func typeName(typ uint16) string {
+	var typedesc string
+	switch typ {
+	case 1:
+		typedesc = "A"
+	case 2:
+		typedesc = "NS"
+	case 5:
+		typedesc = "CNAME"
+	case 6:
+		typedesc = "SOA"
+	case 15:
+		typedesc = "MX"
+	case 16:
+		typedesc = "TXT"
+	case 28:
+		typedesc = "AAAA"
+	case 41:
+		typedesc = "OPT"
+	case 65:
+		typedesc = "HTTPS"
+	default:
+		typedesc = "Unknown"
+	}
+	return typedesc
+}
+
+type ResourceRecord struct {
+	Name     string       // Name of the node to which this record pertains.
+	Type     *RecordType  // Type of RR in numeric form.
+	Class    *RecordClass // Class code.
+	TTL      uint32       // Count of seconds that the RR stays valid.
+	RDLength uint16       // Length of RData field (specified in octets).
+	RData    fmt.Stringer // Additional RR-specific data.
+}
+
+func (rt *ResourceRecord) String() string {
+	var record string
+	switch rt.Name {
+	case "Root":
+		record = fmt.Sprintf(`  - %s:
+    - Name: %s
+    - Type: %s (%d)
+    - %s
+`, rt.Name, rt.Name, rt.Type.Name, rt.Type.Val, rt.RData)
+	default:
+		record = fmt.Sprintf(`  - %s:
+    - Name: %s
+    - Type: %s (%d)
+    - Class: %s (%d)
+    - TTL: %d
+    - Data Length: %d
+    - %s
+`,
+			rt.Name,
+			rt.Name,
+			rt.Type.Name,
+			rt.Type.Val,
+			rt.Class.Name,
+			rt.Class.Val,
+			rt.TTL,
+			rt.RDLength,
+			rt.RData)
+	}
+	return record
+}
+
+type QueryEntry struct {
+	Name  string       // Name of the node to which this record pertains.
+	Type  *RecordType  // Type of RR in numeric form.
+	Class *RecordClass // Class code.
+}
+
+func (qe *QueryEntry) String() string {
+	return fmt.Sprintf(`  - %s:
+    - Name: %s
+    - Type: %s (%d)
+    - Class: %s (%d)
+`, qe.Name, qe.Name, qe.Type.Name, qe.Type.Val, qe.Class.Name, qe.Class.Val)
+}
+
+type RDataA struct {
+	Address netip.Addr
+}
+
+func (d *RDataA) String() string {
+	return fmt.Sprintf("Address: %s", d.Address)
+}
+
+type RDataNS struct {
+	NsdName string
+}
+
+func (d *RDataNS) String() string {
+	return fmt.Sprintf("NS: %s", d.NsdName)
+}
+
+type RDataCNAME struct {
+	CName string
+}
+
+func (d *RDataCNAME) String() string {
+	return fmt.Sprintf("CNAME: %s", d.CName)
+}
+
+type RDataSOA struct {
+	PrimaryNS            string
+	RespAuthorityMailbox string
+	SerialNumber         uint32
+	RefreshInterval      uint32
+	RetryInterval        uint32
+	ExpireLimit          uint32
+	MinimumTTL           uint32
+}
+
+func (d *RDataSOA) String() string {
+	return fmt.Sprintf(`Primary name server: %s 
+    - Responsible authority's mailbox: %s
+    - Serial number: %d
+    - Refresh interval: %d
+    - Retry interval: %d
+    - Expire limit: %d
+    - Minimum TTL: %d`,
+		d.PrimaryNS,
+		d.RespAuthorityMailbox,
+		d.SerialNumber,
+		d.RefreshInterval,
+		d.RetryInterval,
+		d.ExpireLimit,
+		d.MinimumTTL)
+}
+
+type RDataMX struct {
+	Preference uint16
+	Exchange   string
+}
+
+func (d *RDataMX) String() string {
+	return fmt.Sprintf("MX: %d %s", d.Preference, d.Exchange)
+}
+
+type RDataTXT struct {
+	TxtData string
+}
+
+func (d *RDataTXT) String() string {
+	return fmt.Sprintf("TXT: %s", d.TxtData)
+}
+
+type RDataAAAA struct {
+	Address netip.Addr
+}
+
+func (d *RDataAAAA) String() string {
+	return fmt.Sprintf("Address: %s", d.Address)
+
+}
+
+type RDataOPT struct {
+	UDPPayloadSize     uint16
+	HigherBitsExtRCode uint8
+	EDNSVer            uint8
+	Z                  uint16
+	DataLen            uint16
+}
+
+func (d *RDataOPT) String() string {
+	return fmt.Sprintf(`UDP payload size: %d 
+    - Higher bits in extended RCODE: %#02x
+    - EDNS0 version: %d
+    - Z: %d
+    - Data Length: %d
+`,
+		d.UDPPayloadSize,
+		d.HigherBitsExtRCode,
+		d.EDNSVer,
+		d.Z,
+		d.DataLen)
+}
+
+type RDataHTTPS struct {
+	Data string // TODO: add proper parsing
+}
+
+func (d *RDataHTTPS) String() string {
+	return d.Data
+}
+
+type RDataUnknown struct {
+	Data string
+}
+
+func (d *RDataUnknown) String() string {
+	return d.Data
+}
+
+// extractDomain extracts the DNS domain name from the given payload and tail.
 //
 // The domain name is parsed according to RFC 1035 section 4.1.
-func (d *DNSMessage) extractDomain(tail []byte) (string, []byte) {
+func extractDomain(payload, tail []byte) (string, []byte) {
 	// see https://brunoscheufler.com/blog/2024-05-12-building-a-dns-message-parser#domain-names
 	var domainName string
 	for {
@@ -253,7 +552,7 @@ func (d *DNSMessage) extractDomain(tail []byte) (string, []byte) {
 		if blen>>6 == 0b11 {
 			// compressed message offset is 14 bits according to RFC 1035 section 4.1.4
 			offset := binary.BigEndian.Uint16(tail[0:2])&(1<<14-1) - headerSizeDNS
-			part, _ := d.extractDomain(d.payload[offset:]) // TODO: iterative approach
+			part, _ := extractDomain(payload, payload[offset:]) // TODO: iterative approach
 			domainName += part
 			tail = tail[2:]
 			break
@@ -270,168 +569,135 @@ func (d *DNSMessage) extractDomain(tail []byte) (string, []byte) {
 	return strings.TrimRight(domainName, "."), tail
 }
 
+func parseQuery(payload, tail []byte) (*QueryEntry, []byte) {
+	var domain string
+	domain, tail = extractDomain(payload, tail)
+	typ := binary.BigEndian.Uint16(tail[0:2])
+	cls := binary.BigEndian.Uint16(tail[2:4])
+	tail = tail[4:]
+	return &QueryEntry{
+		Name:  domain,
+		Type:  newRecordType(typ),
+		Class: newRecordClass(cls),
+	}, tail
+}
+
+func parseQueries(payload, tail []byte, numRecords uint16) ([]*QueryEntry, []byte) {
+	queries := make([]*QueryEntry, numRecords)
+	for i := range queries {
+		queries[i], tail = parseQuery(payload, tail)
+	}
+	return queries, tail
+}
+
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4
-func (d *DNSMessage) parseRData(typ uint16, tail []byte, rdl int) (string, string, []byte) {
-	var (
-		rdata    string
-		typename string
-	)
+func parseRData(payload, tail []byte, typ uint16, rdl int) (fmt.Stringer, []byte) {
+	var rdata fmt.Stringer
 	switch typ {
 	case 1:
-		typename = "A"
 		addr, _ := netip.AddrFromSlice(tail[0:rdl])
-		rdata = fmt.Sprintf("Address: %s", addr)
+		rdata = &RDataA{Address: addr}
 	case 2:
-		typename = "NS"
-		domain, _ := d.extractDomain(tail)
-		rdata = fmt.Sprintf("%s: %s", typename, domain)
+		domain, _ := extractDomain(payload, tail)
+		rdata = &RDataNS{NsdName: domain}
 	case 5:
-		typename = "CNAME"
-		domain, _ := d.extractDomain(tail)
-		rdata = fmt.Sprintf("%s: %s", typename, domain)
+		domain, _ := extractDomain(payload, tail)
+		rdata = &RDataCNAME{CName: domain}
 	case 6:
-		typename = "SOA"
 		var (
 			primary string
 			mailbox string
 		)
 		ttail := tail
-		primary, ttail = d.extractDomain(ttail)
-		mailbox, ttail = d.extractDomain(ttail)
+		primary, ttail = extractDomain(payload, ttail)
+		mailbox, ttail = extractDomain(payload, ttail)
 		serial := binary.BigEndian.Uint32(ttail[0:4])
 		refresh := binary.BigEndian.Uint32(ttail[4:8])
 		retry := binary.BigEndian.Uint32(ttail[8:12])
 		expire := binary.BigEndian.Uint32(ttail[12:16])
 		min := binary.BigEndian.Uint32(ttail[16:20])
-		rdata = fmt.Sprintf(`Primary name server: %s 
-    - Responsible authority's mailbox: %s
-    - Serial number: %d
-    - Refresh interval: %d
-    - Retry interval: %d
-    - Expire limit: %d
-    - Minimum TTL: %d`,
-			primary, mailbox, serial, refresh, retry, expire, min)
+		rdata = &RDataSOA{
+			PrimaryNS:            primary,
+			RespAuthorityMailbox: mailbox,
+			SerialNumber:         serial,
+			RefreshInterval:      refresh,
+			RetryInterval:        retry,
+			ExpireLimit:          expire,
+			MinimumTTL:           min,
+		}
 	case 15:
-		typename = "MX"
 		preference := binary.BigEndian.Uint16(tail[0:2])
-		domain, _ := d.extractDomain(tail[2:rdl])
-		rdata = fmt.Sprintf("%s: preference %d %s", typename, preference, domain)
+		domain, _ := extractDomain(payload, tail[2:rdl])
+		rdata = &RDataMX{
+			Preference: preference,
+			Exchange:   domain,
+		}
 	case 16:
-		typename = "TXT"
-		rdata = fmt.Sprintf("%s: %s", typename, tail[:rdl])
+		rdata = &RDataTXT{TxtData: string(tail[:rdl])}
 	case 28:
-		typename = "AAAA"
 		addr, _ := netip.AddrFromSlice(tail[0:rdl])
-		rdata = fmt.Sprintf("Address: %s", addr)
+		rdata = &RDataAAAA{Address: addr}
 	case 41:
-		typename = "OPT"
+		ups := binary.BigEndian.Uint16(tail[0:2])
+		hb := tail[2]
+		ednsv := tail[3]
+		zres := binary.BigEndian.Uint16(tail[4:6])
+		tail = tail[8:]
+		rdata = &RDataOPT{
+			UDPPayloadSize:     ups,
+			HigherBitsExtRCode: hb,
+			EDNSVer:            ednsv,
+			Z:                  zres,
+			DataLen:            uint16(rdl),
+		}
 	case 65:
-		typename = "HTTPS" // TODO: add proper parsing
-		rdata = fmt.Sprintf("%s: %d bytes", typename, rdl)
+		rdata = &RDataHTTPS{Data: string(tail[:rdl])}
 	default:
-		rdata = fmt.Sprintf("Unknown: %d bytes", rdl)
+		rdata = &RDataUnknown{Data: string(tail[:rdl])}
 	}
-	return typename, rdata, tail[rdl:]
+	return rdata, tail[rdl:]
 }
 
-func (d *DNSMessage) parseQuery(tail []byte) (string, []byte) {
-	var domain string
-	domain, tail = d.extractDomain(tail)
+func parseRoot(payload, tail []byte) (*ResourceRecord, []byte) {
 	typ := binary.BigEndian.Uint16(tail[0:2])
-	typename, _, _ := d.parseRData(typ, tail, 0)
-	class := binary.BigEndian.Uint16(tail[2:4])
-	cname := d.className(class)
-	tail = tail[4:]
-	return fmt.Sprintf(`  - %s: 
-    - Name: %s
-    - Type: %s (%d)
-    - Class: %s (%d)
-`, domain, domain, typename, typ, cname, class), tail
+	rdl := int(binary.BigEndian.Uint16(tail[8:10]))
+	var rdata fmt.Stringer
+	rdata, tail = parseRData(payload, tail[2:], typ, rdl)
+	return &ResourceRecord{
+		Name:  "Root",
+		Type:  newRecordType(typ),
+		Class: &RecordClass{},
+		RData: rdata,
+	}, tail
 }
 
-func (d *DNSMessage) parseRR(tail []byte) (string, []byte) {
+func parseResourceRecord(payload, tail []byte) (*ResourceRecord, []byte) {
 	var domain string
-	domain, tail = d.extractDomain(tail)
+	domain, tail = extractDomain(payload, tail)
 	typ := binary.BigEndian.Uint16(tail[0:2])
-	class := binary.BigEndian.Uint16(tail[2:4])
-	cname := d.className(class)
+	cls := binary.BigEndian.Uint16(tail[2:4])
 	ttl := binary.BigEndian.Uint32(tail[4:8])
-	rdl := int(binary.BigEndian.Uint16(tail[8:10]))
-	var (
-		typename string
-		rdata    string
-	)
-	typename, rdata, tail = d.parseRData(typ, tail[10:], rdl)
-	return fmt.Sprintf(`  - %s:     
-    - Name: %s
-    - Type: %s (%d)
-    - Class: %s (%d)
-    - TTL: %d
-    - Data Length: %d
-    - %s
-`, domain, domain, typename, typ, cname, class, ttl, rdl, rdata), tail
+	rdl := binary.BigEndian.Uint16(tail[8:10])
+	var rdata fmt.Stringer
+	rdata, tail = parseRData(payload, tail[10:], typ, int(rdl))
+	return &ResourceRecord{
+		Name:     domain,
+		Type:     newRecordType(typ),
+		Class:    newRecordClass(cls),
+		TTL:      ttl,
+		RDLength: rdl,
+		RData:    rdata,
+	}, tail
 }
 
-func (d *DNSMessage) parseRoot(tail []byte) (string, []byte) {
-	domain := "Root"
-	tail = tail[1:]
-	typ := binary.BigEndian.Uint16(tail[0:2])
-	ups := binary.BigEndian.Uint16(tail[2:4])
-	hb := tail[4]
-	ednsv := tail[5]
-	zres := binary.BigEndian.Uint16(tail[6:8])
-	rdl := int(binary.BigEndian.Uint16(tail[8:10]))
-	var typename string
-	typename, _, tail = d.parseRData(typ, tail[10:], rdl)
-	return fmt.Sprintf(`  - %s: 
-    - Name: %s
-    - Type: %s (%d)
-    - UDP payload size: %d
-    - Higher bits in extended RCODE: %#02x
-    - EDNS0 version: %d
-    - Z: %d
-    - Data Length: %d
-`, domain, domain, typename, typ, ups, hb, ednsv, zres, rdl), tail
-}
-
-func (d *DNSMessage) rrecords() string {
-	var (
-		sb   strings.Builder
-		rec  string
-		tail = d.payload
-	)
-	if d.Questions > 0 {
-		sb.WriteString("- Queries:\n")
-		for range d.Questions {
-			rec, tail = d.parseQuery(tail)
-			sb.WriteString(rec)
+func parseResourceRecords(payload, tail []byte, numRecords uint16) ([]*ResourceRecord, []byte) {
+	records := make([]*ResourceRecord, numRecords)
+	for i := range records {
+		if tail[0] != 0 {
+			records[i], tail = parseResourceRecord(payload, tail)
+		} else {
+			records[i], tail = parseRoot(payload, tail[1:])
 		}
 	}
-	if d.AnswerRRs > 0 {
-		sb.WriteString("- Answers:\n")
-		for range d.AnswerRRs {
-			rec, tail = d.parseRR(tail)
-			sb.WriteString(rec)
-		}
-	}
-	if d.AuthorityRRs > 0 {
-		sb.WriteString("- Authoritative nameservers:\n")
-		for range d.AuthorityRRs {
-			rec, tail = d.parseRR(tail)
-			sb.WriteString(rec)
-		}
-	}
-	if d.AdditionalRRs > 0 {
-		sb.WriteString("- Additional records:\n")
-		for range d.AdditionalRRs {
-			if tail[0] != 0 {
-				rec, tail = d.parseRR(tail)
-				sb.WriteString(rec)
-			} else {
-				rec, tail = d.parseRoot(tail)
-				sb.WriteString(rec)
-			}
-		}
-	}
-	return sb.String()
+	return records, tail
 }
