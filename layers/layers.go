@@ -31,6 +31,7 @@ var (
 	dcrlf    = []byte("\r\n\r\n")
 	proto    = []byte("HTTP/1.1")
 	ellipsis = []byte("...")
+	contdata = []byte("Continuation data")
 )
 
 type Layer interface {

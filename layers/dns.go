@@ -200,7 +200,7 @@ func (d *DNSMessage) String() string {
 		d.ANCount,
 		d.NSCount,
 		d.ARCount,
-		d.rrecords(),
+		d.printRecords(),
 	)
 }
 
@@ -272,7 +272,7 @@ func (d *DNSMessage) NextLayer() (string, []byte) {
 	return "", nil
 }
 
-func (d *DNSMessage) rrecords() string {
+func (d *DNSMessage) printRecords() string {
 	var sb strings.Builder
 	if d.QDCount > 0 {
 		sb.WriteString("- Queries:\n")

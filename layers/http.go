@@ -22,7 +22,7 @@ func (h *HTTPMessage) Summary() string {
 }
 
 func (h *HTTPMessage) ellipsify() {
-	h.summary = ellipsis
+	h.summary = contdata
 	h.data = ellipsis
 }
 
