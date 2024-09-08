@@ -5,6 +5,8 @@ import (
 	"unsafe"
 )
 
+const maxLenSummary = 100
+
 var LayerMap = map[string]Layer{
 	"ETH":    &EthernetFrame{},
 	"IPv4":   &IPv4Packet{},

@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const headerSizeTLS = 5
+
 type Record struct {
 	ContentType     uint8
 	ContentTypeDesc string
@@ -48,9 +50,6 @@ func (t *TLSMessage) Summary() string {
 		sb.WriteString(fmt.Sprintf("Ignored unknown record Len: %d", len(t.Data)))
 	} else {
 		for i, rec := range t.Records {
-			if sb.Len() > 100 {
-				return sb.String()[:100] + string(ellipsis)
-			}
 			if i > 0 {
 				sb.WriteString(fmt.Sprintf("%s (%d) Len: %d ", rec.ContentTypeDesc, rec.ContentType, rec.Length))
 				continue
@@ -64,6 +63,9 @@ func (t *TLSMessage) Summary() string {
 				rec.ContentTypeDesc,
 				rec.ContentType,
 				rec.Length))
+			if sb.Len() > maxLenSummary {
+				return sb.String()[:maxLenSummary] + string(ellipsis)
+			}
 		}
 	}
 	return sb.String()
@@ -79,6 +81,9 @@ func (t *TLSMessage) printRecords() string {
 }
 
 func (t *TLSMessage) Parse(data []byte) error {
+	if len(data) < headerSizeTLS {
+		return fmt.Errorf("minimum header size for TLS is %d bytes, got %d bytes", headerSizeTLS, len(data))
+	}
 	t.Records = make([]*Record, 0, 5)
 	for len(data) > 0 {
 		ctype := data[0]
@@ -91,8 +96,8 @@ func (t *TLSMessage) Parse(data []byte) error {
 		if verdesc == "Unknown" {
 			break
 		}
-		rlen := binary.BigEndian.Uint16(data[3:5])
-		if 5+rlen > uint16(len(data)) {
+		rlen := binary.BigEndian.Uint16(data[3:headerSizeTLS])
+		if headerSizeTLS+rlen > uint16(len(data)) {
 			break
 		}
 		r := &Record{
@@ -101,10 +106,10 @@ func (t *TLSMessage) Parse(data []byte) error {
 			Version:         ver,
 			VersionDesc:     verdesc,
 			Length:          rlen,
-			data:            data[5 : 5+rlen],
+			data:            data[headerSizeTLS : headerSizeTLS+rlen],
 		}
 		t.Records = append(t.Records, r)
-		data = data[5+rlen:]
+		data = data[headerSizeTLS+rlen:]
 	}
 	t.Data = data
 	return nil
@@ -141,6 +146,8 @@ func ctdesc(ct uint8) string {
 func verdesc(ver uint16) string {
 	var verdesc string
 	switch ver {
+	case 0x0200:
+		verdesc = "SSL 2.0"
 	case 0x0300:
 		verdesc = "SSL 3.0"
 	case 0x0301:
@@ -149,6 +156,8 @@ func verdesc(ver uint16) string {
 		verdesc = "TLS 1.1"
 	case 0x0303:
 		verdesc = "TLS 1.2"
+	case 0x0304:
+		verdesc = "TLS 1.3"
 	default:
 		verdesc = "Unknown"
 	}

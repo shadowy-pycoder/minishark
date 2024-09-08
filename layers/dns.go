@@ -208,32 +208,32 @@ func (d *DNSMessage) Summary() string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("DNS Message: %s %s %#04x ", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID))
 	for _, rec := range d.Questions {
-		if sb.Len() > 100 {
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+		if sb.Len() > maxLenSummary {
 			goto result
 		}
-		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
 	}
 	for _, rec := range d.AnswerRRs {
-		if sb.Len() > 100 {
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+		if sb.Len() > maxLenSummary {
 			goto result
 		}
-		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
 	}
 	for _, rec := range d.AuthorityRRs {
-		if sb.Len() > 100 {
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+		if sb.Len() > maxLenSummary {
 			goto result
 		}
-		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
 	}
 	for _, rec := range d.AdditionalRRs {
-		if sb.Len() > 100 {
+		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+		if sb.Len() > maxLenSummary {
 			goto result
 		}
-		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
 	}
 	return sb.String()
 result:
-	return sb.String()[:100] + string(ellipsis)
+	return sb.String()[:maxLenSummary] + string(ellipsis)
 }
 
 // Parse parses the given byte data into a DNSMessage struct.
