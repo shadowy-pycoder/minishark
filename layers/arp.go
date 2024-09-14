@@ -79,11 +79,11 @@ func (ap *ARPPacket) Parse(data []byte) error {
 	}
 	ap.HardwareType = binary.BigEndian.Uint16(data[0:2])
 	ap.ProtocolType = binary.BigEndian.Uint16(data[2:4])
-	ap.ProtocolTypeDesc = ap.ptype()
+	ap.ProtocolTypeDesc = ptypedesc(ap.ProtocolType)
 	ap.Hlen = data[4]
 	ap.Plen = data[5]
 	ap.Op = binary.BigEndian.Uint16(data[6:8])
-	ap.OpDesc = ap.op()
+	ap.OpDesc = opdesc(ap.Op)
 	hoffset := 8 + ap.Hlen
 	ap.SenderMAC = net.HardwareAddr(data[8:hoffset])
 	poffset := hoffset + ap.Plen
@@ -104,9 +104,9 @@ func (ap *ARPPacket) NextLayer() (string, []byte) {
 	return "", nil
 }
 
-func (ap *ARPPacket) ptype() string {
+func ptypedesc(pt uint16) string {
 	var proto string
-	switch ap.ProtocolType {
+	switch pt {
 	case 0x0800:
 		proto = "IPv4"
 	case 0x86dd:
@@ -117,15 +117,15 @@ func (ap *ARPPacket) ptype() string {
 	return proto
 }
 
-func (ap *ARPPacket) op() string {
-	var op string
-	switch ap.Op {
+func opdesc(op uint16) string {
+	var opdesc string
+	switch op {
 	case 1:
-		op = "request"
+		opdesc = "request"
 	case 2:
-		op = "reply"
+		opdesc = "reply"
 	default:
-		op = "Unknown"
+		opdesc = "Unknown"
 	}
-	return op
+	return opdesc
 }

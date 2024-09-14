@@ -99,7 +99,7 @@ func (p *IPv4Packet) Parse(data []byte) error {
 	p.IHL = versionIHL & 15
 	dscpECN := data[1]
 	p.DSCP = dscpECN >> 2
-	p.DSCPDesc = p.dscp()
+	p.DSCPDesc = dscpdesc(p.DSCP)
 	p.ECN = dscpECN & 3
 	p.TotalLength = binary.BigEndian.Uint16(data[2:4])
 	p.Identification = binary.BigEndian.Uint16(data[4:6])
@@ -139,36 +139,36 @@ func (p *IPv4Packet) NextLayer() (string, []byte) {
 	return layer, p.payload
 }
 
-func (p *IPv4Packet) dscp() string {
+func dscpdesc(dscp uint8) string {
 	// https://en.wikipedia.org/wiki/Differentiated_services
-	var dscp string
-	switch p.DSCP {
+	var dscpdesc string
+	switch dscp {
 	case 0:
-		dscp = "Standard (DF)"
+		dscpdesc = "Standard (DF)"
 	case 1:
-		dscp = "Lower-effort (LE)"
+		dscpdesc = "Lower-effort (LE)"
 	case 48:
-		dscp = "Network control (CS6)"
+		dscpdesc = "Network control (CS6)"
 	case 46:
-		dscp = "Telephony (EF)"
+		dscpdesc = "Telephony (EF)"
 	case 40:
-		dscp = "Signaling (CS5)"
+		dscpdesc = "Signaling (CS5)"
 	case 34, 36, 38:
-		dscp = "Multimedia conferencing (AF41, AF42, AF43)"
+		dscpdesc = "Multimedia conferencing (AF41, AF42, AF43)"
 	case 32:
-		dscp = "Real-time interactive (CS4)"
+		dscpdesc = "Real-time interactive (CS4)"
 	case 26, 28, 30:
-		dscp = "Multimedia streaming (AF31, AF32, AF33)"
+		dscpdesc = "Multimedia streaming (AF31, AF32, AF33)"
 	case 24:
-		dscp = "Broadcast video (CS3)"
+		dscpdesc = "Broadcast video (CS3)"
 	case 18, 20, 22:
-		dscp = "Low-latency data (AF21, AF22, AF23)"
+		dscpdesc = "Low-latency data (AF21, AF22, AF23)"
 	case 16:
-		dscp = "OAM (CS2)"
+		dscpdesc = "OAM (CS2)"
 	case 10, 12, 14:
-		dscp = "High-throughput data (AF11, AF12, AF13)"
+		dscpdesc = "High-throughput data (AF11, AF12, AF13)"
 	default:
-		dscp = "Unknown"
+		dscpdesc = "Unknown"
 	}
-	return dscp
+	return dscpdesc
 }
