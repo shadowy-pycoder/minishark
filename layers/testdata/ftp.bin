@@ -1,0 +1,19 @@
+211-Supported extensions:
+ AUTH TLS;SSL;
+ CDUP
+ CLNT
+ CSID
+ EPSV
+ EPRT
+ MDTM
+ MFMT
+ MLST Type*;Modify*;Create*;Win32.ea;Size*;
+ PASV
+ PBSZ
+ PORT
+ PROT C;P;
+ REST STREAM
+ SIZE
+ TVFS
+ UTF8
+211 End.
