@@ -115,9 +115,7 @@ func (t *TLSMessage) Parse(data []byte) error {
 	return nil
 }
 
-func (t *TLSMessage) NextLayer() (string, []byte) {
-	return "", nil
-}
+func (t *TLSMessage) NextLayer() (layer string, payload []byte) { return }
 
 func ctdesc(ct uint8) string {
 	// https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-5

@@ -68,9 +68,7 @@ func (i *ICMPv6Segment) Parse(data []byte) error {
 	return nil
 }
 
-func (i *ICMPv6Segment) NextLayer() (string, []byte) {
-	return "", nil
-}
+func (i *ICMPv6Segment) NextLayer() (layer string, payload []byte) { return }
 
 func (i *ICMPv6Segment) typecode() (string, string) {
 	// https://en.wikipedia.org/wiki/ICMPv6

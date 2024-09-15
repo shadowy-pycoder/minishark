@@ -100,9 +100,7 @@ func (ap *ARPPacket) Parse(data []byte) error {
 	return nil
 }
 
-func (ap *ARPPacket) NextLayer() (string, []byte) {
-	return "", nil
-}
+func (ap *ARPPacket) NextLayer() (layer string, payload []byte) { return }
 
 func ptypedesc(pt uint16) string {
 	var proto string

@@ -39,7 +39,7 @@ var (
 type Layer interface {
 	fmt.Stringer
 	Parse(data []byte) error
-	NextLayer() (name string, payload []byte)
+	NextLayer() (layer string, payload []byte)
 	Summary() string
 }
 

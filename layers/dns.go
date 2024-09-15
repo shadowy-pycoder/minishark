@@ -268,9 +268,7 @@ func (d *DNSMessage) Parse(data []byte) error {
 	return nil
 }
 
-func (d *DNSMessage) NextLayer() (string, []byte) {
-	return "", nil
-}
+func (d *DNSMessage) NextLayer() (layer string, payload []byte) { return }
 
 func (d *DNSMessage) printRecords() string {
 	var sb strings.Builder

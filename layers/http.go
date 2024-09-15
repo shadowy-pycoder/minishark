@@ -56,6 +56,4 @@ func (h *HTTPMessage) Parse(data []byte) error {
 	return nil
 }
 
-func (h *HTTPMessage) NextLayer() (string, []byte) {
-	return "", nil
-}
+func (h *HTTPMessage) NextLayer() (layer string, payload []byte) { return }
