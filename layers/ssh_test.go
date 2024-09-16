@@ -8,15 +8,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func BenchmarkParseSSH(b *testing.B) {
-	packet, close := testPacketBench(b, "ssh")
+func benchSSH(b *testing.B, path string) {
+	b.Helper()
+	ssh := &SSHMessage{}
+
+	packet, close := testPacketBench(b, path)
 	defer close()
 	b.ResetTimer()
-	ssh := &SSHMessage{}
 	for i := 0; i < b.N; i++ {
 		_ = ssh.Parse(packet)
 		fmt.Fprint(io.Discard, ssh.String())
 	}
+}
+
+func BenchmarkParseSSHProtoEx(b *testing.B) {
+	benchSSH(b, "ssh_proto_ex")
+}
+
+func BenchmarkParseSSHKeyExInitClient(b *testing.B) {
+	benchSSH(b, "ssh_client_kex_init")
+}
+
+func BenchmarkParseSSHKeyExInitServer(b *testing.B) {
+	benchSSH(b, "ssh_server_kex_init")
+}
+
+func BenchmarkParseSSHKeyExDHClient(b *testing.B) {
+	benchSSH(b, "ssh_client_dh_kex")
+}
+
+func BenchmarkParseSSHKeyExDHServer(b *testing.B) {
+	benchSSH(b, "ssh_server_dh_kex")
+}
+
+func BenchmarkParseSSHNewKeysClient(b *testing.B) {
+	benchSSH(b, "ssh_client_new_keys")
 }
 
 func TestParseSSHProtoEx(t *testing.T) {
