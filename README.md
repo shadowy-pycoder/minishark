@@ -71,3 +71,9 @@ Output:
 - Verbose: false
 ```
 ![Screenshot from 2024-09-17 09-37-50](https://github.com/user-attachments/assets/44c233ee-85a4-43f2-8f65-1ef239362bab)
+
+With `-v` flag enabled, you will see more detailed information:
+
+
+![Screenshot from 2024-09-17 09-56-20](https://github.com/user-attachments/assets/11539ea7-779e-4faf-8fce-2eea9ab653c7)
+![Screenshot from 2024-09-17 09-56-47](https://github.com/user-attachments/assets/26b6353d-d312-40c5-9917-3f2f7bb8abdc)
