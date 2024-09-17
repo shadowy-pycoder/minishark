@@ -70,3 +70,4 @@ Output:
 - BPF Filter: "port 53"
 - Verbose: false
 ```
+![Screenshot from 2024-09-17 09-37-50](https://github.com/user-attachments/assets/44c233ee-85a4-43f2-8f65-1ef239362bab)
