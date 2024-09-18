@@ -77,3 +77,22 @@ With `-v` flag enabled, you will see more detailed information:
 
 ![Screenshot from 2024-09-17 09-56-20](https://github.com/user-attachments/assets/11539ea7-779e-4faf-8fce-2eea9ab653c7)
 ![Screenshot from 2024-09-17 09-56-47](https://github.com/user-attachments/assets/26b6353d-d312-40c5-9917-3f2f7bb8abdc)
+
+## Supported layers
+
+- [Ethernet](https://en.wikipedia.org/wiki/Ethernet_frame) 
+- [IPv4](https://en.wikipedia.org/wiki/IPv4)
+- [IPv6](https://en.wikipedia.org/wiki/IPv6)
+- [ARP](https://en.wikipedia.org/wiki/Address_Resolution_Protocol)
+- [ICMP](https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol)
+- [ICMPv6](https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol_for_IPv6)
+- [TCP](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)
+- [UDP](https://en.wikipedia.org/wiki/User_Datagram_Protocol)
+- [DNS](https://en.wikipedia.org/wiki/Domain_Name_System)
+- [HTTP](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol)
+- [SNMP](https://en.wikipedia.org/wiki/Simple_Network_Management_Protocol)
+- [FTP](https://en.wikipedia.org/wiki/File_Transfer_Protocol)
+- [SSH](https://en.wikipedia.org/wiki/Secure_Shell)
+- [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security)
+
+
