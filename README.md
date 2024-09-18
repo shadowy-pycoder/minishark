@@ -96,3 +96,9 @@ With `-v` flag enabled, you will see more detailed information:
 - [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security)
 
 
+## Roadmap
+
+- [x] Online packet capture to `stdout`, `txt`, `pcap` and `pcapng` files
+- [ ] Offline packet capture from `pcap` and `pcapng` files
+- [ ] Add proper parsing for `SNMP` messages
+- [ ] Add packet generation and packet injection functionality
