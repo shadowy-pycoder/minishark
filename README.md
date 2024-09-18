@@ -1,3 +1,4 @@
+![mshark_new](https://github.com/user-attachments/assets/ee1b9526-dcae-4ff8-962d-315897e49ed0)
 # mShark - Mini [Wireshark](https://www.wireshark.org/) written in Go
 
 
